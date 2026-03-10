@@ -57,6 +57,21 @@ public class PlayerMovement : MonoBehaviour
     public LayerMask ceilingMask = ~0;
 
     // ─────────────────────────────────────────────
+    //  WEIGHT / CARRY
+    // ─────────────────────────────────────────────
+    [Header("Carry Weight")]
+    [Tooltip("Den vægt (kg) hvor spilleren er fuldstændig bremset (hastighed = 0).\n" +
+             "Bruges som reference i PickupObject. Prøv en værdi omkring 20.")]
+    public float maxCarryWeight = 20f;
+
+    /// <summary>
+    /// Sættes automatisk af PickupObject når man samler noget op (0–1).
+    /// 1 = fuld hastighed, 0 = ingen hastighed.
+    /// </summary>
+    [HideInInspector]
+    public float weightMultiplier = 1f;
+
+    // ─────────────────────────────────────────────
     //  CAMERA / LOOK
     // ─────────────────────────────────────────────
     [Header("Camera Look")]
@@ -229,7 +244,7 @@ public class PlayerMovement : MonoBehaviour
         else if (Input.GetKey(KeyCode.LeftShift))
             targetSpeed = sprintSpeed;
 
-        Vector3 targetVelocity = worldInput * targetSpeed;
+        Vector3 targetVelocity = worldInput * targetSpeed * weightMultiplier;
 
         // ── Accelerate / Decelerate ───────────────
         float rate = inputDir.sqrMagnitude > 0.01f ? acceleration : deceleration;
