@@ -174,8 +174,13 @@ public class PlayerMovement : MonoBehaviour
         // Smoothly resize the CharacterController
         float newHeight = Mathf.Lerp(_cc.height, _targetHeight, Time.deltaTime * crouchTransitionSpeed);
         float delta = newHeight - _cc.height;
+        float oldHeight = _cc.height;
+
         _cc.height = newHeight;
-        _cc.center = new Vector3(0f, _cc.height * 0.5f, 0f);
+
+        // flyt center kun halvdelen af ændringen
+        float centerOffset = (newHeight - oldHeight) / 2f;
+        _cc.center += new Vector3(0f, centerOffset, 0f);
 
         // Move the camera with the height change so it doesn't clip into the ceiling
         if (cameraTransform != null)
