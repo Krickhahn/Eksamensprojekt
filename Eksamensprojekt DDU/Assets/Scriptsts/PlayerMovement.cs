@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.Events;
 
 /// <summary>
 /// 3D Player Movement Controller
@@ -72,6 +73,37 @@ public class PlayerMovement : MonoBehaviour
     public float weightMultiplier = 1f;
 
     // ─────────────────────────────────────────────
+    //  HEALTH
+    // ─────────────────────────────────────────────
+    [Header("Health")]
+    [Tooltip("Spillerens maksimale liv.")]
+    public float maxHealth = 100f;
+
+    [Tooltip("Sæt til true for at aktivere regenerering af liv over tid.")]
+    public bool enableHealthRegen = false;
+
+    [Tooltip("Hvor meget liv der regenereres pr. sekund.")]
+    public float healthRegenRate = 2f;
+
+    [Tooltip("Sekunder uden skade før regenerering begynder.")]
+    public float regenDelay = 5f;
+
+    [Tooltip("Hvor lang tid spilleren er låst fast i death-tilstand før respawn/game over. Sæt til 0 for øjeblikkelig.")]
+    public float deathDuration = 3f;
+
+    [Tooltip("Kaldes når spilleren tager skade. Sender (nuværende liv, max liv).")]
+    public UnityEvent<float, float> onDamaged;
+
+    [Tooltip("Kaldes når spilleren bliver helbredt. Sender (nuværende liv, max liv).")]
+    public UnityEvent<float, float> onHealed;
+
+    [Tooltip("Kaldes én gang når spilleren dør.")]
+    public UnityEvent onDeath;
+
+    [Tooltip("Kaldes når respawn-logik skal køre (efter deathDuration).")]
+    public UnityEvent onRespawn;
+
+    // ─────────────────────────────────────────────
     //  CAMERA / LOOK
     // ─────────────────────────────────────────────
     [Header("Camera Look")]
@@ -114,12 +146,31 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     private CharacterController _cc;
     private Vector3 _velocity;          // current move velocity (world space)
-    private float _verticalVelocity;  // Y component handled separately
-    private float _xRotation;         // camera pitch tracker
+    private float _verticalVelocity;    // Y component handled separately
+    private float _xRotation;           // camera pitch tracker
     private float _bobTimer;
     private Vector3 _cameraLocalOrigin;
     private bool _isCrouching;
     private float _targetHeight;
+
+    // Health state
+    private float _currentHealth;
+    private bool _isDead;
+    private float _timeSinceLastDamage;
+    private float _deathTimer;
+
+    // ─────────────────────────────────────────────
+    //  PUBLIC PROPERTIES
+    // ─────────────────────────────────────────────
+
+    /// <summary>Spillerens nuværende liv (read-only udefra).</summary>
+    public float CurrentHealth => _currentHealth;
+
+    /// <summary>Er spilleren død?</summary>
+    public bool IsDead => _isDead;
+
+    /// <summary>Liv som en 0–1 værdi, nyttig til UI-healthbar.</summary>
+    public float HealthPercent => _currentHealth / maxHealth;
 
     // ─────────────────────────────────────────────
     //  INIT
@@ -128,6 +179,10 @@ public class PlayerMovement : MonoBehaviour
     {
         _cc = GetComponent<CharacterController>();
         _targetHeight = standingHeight;
+
+        _currentHealth = maxHealth;
+        _isDead = false;
+        _timeSinceLastDamage = 0f;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -141,10 +196,93 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     void Update()
     {
+        if (_isDead)
+        {
+            HandleDeath();
+            return;
+        }
+
         HandleLook();
         HandleCrouch();
         HandleMovement();
         if (enableHeadBob) HandleHeadBob();
+        if (enableHealthRegen) HandleHealthRegen();
+    }
+
+    // ─────────────────────────────────────────────
+    //  HEALTH SYSTEM
+    // ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Giv spilleren skade. Kaldes typisk fra et enemy-script:
+    /// <code>player.TakeDamage(25f);</code>
+    /// </summary>
+    /// <param name="amount">Positiv mængde skade.</param>
+    public void TakeDamage(float amount)
+    {
+        if (_isDead || amount <= 0f) return;
+
+        _currentHealth = Mathf.Max(_currentHealth - amount, 0f);
+        _timeSinceLastDamage = 0f;
+
+        onDamaged?.Invoke(_currentHealth, maxHealth);
+
+        if (_currentHealth <= 0f)
+            Die();
+    }
+
+    /// <summary>
+    /// Helbred spilleren.
+    /// </summary>
+    /// <param name="amount">Positiv mængde liv der gendannes.</param>
+    public void Heal(float amount)
+    {
+        if (_isDead || amount <= 0f) return;
+
+        _currentHealth = Mathf.Min(_currentHealth + amount, maxHealth);
+        onHealed?.Invoke(_currentHealth, maxHealth);
+    }
+
+    /// <summary>
+    /// Dræb spilleren øjeblikkeligt, uanset nuværende liv.
+    /// </summary>
+    public void KillInstantly()
+    {
+        if (_isDead) return;
+        _currentHealth = 0f;
+        Die();
+    }
+
+    void Die()
+    {
+        _isDead = true;
+        _deathTimer = 0f;
+
+        // Stop al bevægelse
+        _velocity = Vector3.zero;
+        _verticalVelocity = 0f;
+
+        onDeath?.Invoke();
+    }
+
+    void HandleDeath()
+    {
+        // Tæl ned – herefter kaldes onRespawn så du kan loade en scene, vise game over, osv.
+        _deathTimer += Time.deltaTime;
+        if (_deathTimer >= deathDuration)
+        {
+            onRespawn?.Invoke();
+        }
+    }
+
+    void HandleHealthRegen()
+    {
+        _timeSinceLastDamage += Time.deltaTime;
+
+        if (_timeSinceLastDamage >= regenDelay && _currentHealth < maxHealth)
+        {
+            Heal(healthRegenRate * Time.deltaTime);
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -188,7 +326,6 @@ public class PlayerMovement : MonoBehaviour
 
         // Smoothly resize the CharacterController
         float newHeight = Mathf.Lerp(_cc.height, _targetHeight, Time.deltaTime * crouchTransitionSpeed);
-        float delta = newHeight - _cc.height;
         float oldHeight = _cc.height;
 
         _cc.height = newHeight;
