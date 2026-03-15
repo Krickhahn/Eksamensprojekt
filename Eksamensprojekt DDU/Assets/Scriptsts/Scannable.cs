@@ -25,9 +25,6 @@ public class Scannable : MonoBehaviour
     [Tooltip("Unikt varenummer — skal matche Order.itemID nøjagtigt.")]
     public string itemID;
 
-    [Tooltip("Læsbart navn der vises på displayet, f.eks. 'Fragile Box' eller 'Tung Pakke'.\nLad feltet stå tomt for at bruge itemID som navn.")]
-    public string itemName = "";
-
     [Header("Zone-indstillinger")]
     [Tooltip("Reference til DeliveryZone-komponenten på dette objekt (kun relevant hvis type = DeliveryZone).")]
     public DeliveryZone deliveryZone;

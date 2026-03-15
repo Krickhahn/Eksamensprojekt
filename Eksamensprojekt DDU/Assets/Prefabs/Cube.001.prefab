@@ -14,7 +14,6 @@ GameObject:
   - component: {fileID: 2777667753003266252}
   - component: {fileID: 8986337320346129038}
   - component: {fileID: 2866840661223412481}
-  - component: {fileID: 6881655310940340192}
   m_Layer: 6
   m_Name: Cube.001
   m_TagString: Untagged
@@ -163,25 +162,6 @@ MonoBehaviour:
   yawOffset: 0
   uprightOffset: {x: -90, y: 90, z: 0}
   weight: 5
-  outlineColor: {r: 1, g: 0.85, b: 0, a: 1}
-  outlineWidth: 4
-  scannerAnimator: {fileID: 0}
---- !u!114 &6881655310940340192
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1094718087075392342}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d9a027af997e7dc44b8fbef3c9fc80a6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Scannable
-  type: 0
-  itemID: 
-  itemName: 
-  deliveryZone: {fileID: 0}
 --- !u!1 &1486437678739857746
 GameObject:
   m_ObjectHideFlags: 0
