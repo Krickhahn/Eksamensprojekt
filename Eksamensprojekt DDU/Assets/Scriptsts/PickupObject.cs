@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using static UnityEditor.Experimental.GraphView.GraphView;
 
 /// <summary>
 /// Sæt dette script på ethvert objekt der skal kunne samles op af spilleren.
@@ -47,14 +48,21 @@ public class PickupObject : MonoBehaviour
              "0 = ingen effekt. Prøv værdier mellem 0 og 20.")]
     public float weight = 5f;
 
+
+    [Header("Skanner")]
+    [Tooltip("ScannerAnimator-komponenten på Scanner-objektet.\nSkanneren glider ned/op når dette objekt samles op/sættes ned.")]
+    public ScannerAnimator scannerAnimator;
+
     // ── Private state ──────────────────────────────────────────────
     private bool _isHeld;
     private Rigidbody _rb;
     private Camera _cam;
     private int _originalLayer;
     private PlayerMovement _player;
-
     private const string HeldLayerName = "HeldObject";
+
+    /// <summary>True hvis spilleren pt. holder et objekt. Bruges af ScannerDisplay.</summary>
+    public static bool IsHoldingItem { get; private set; }
 
     // ──────────────────────────────────────────────────────────────
     void Awake()
@@ -73,6 +81,7 @@ public class PickupObject : MonoBehaviour
 
         if (_player == null)
             Debug.LogWarning("[PickupObject] Fandt ikke PlayerMovement — vægt-effekt virker ikke.");
+
     }
 
     void Update()
@@ -86,97 +95,105 @@ public class PickupObject : MonoBehaviour
         }
     }
 
-    void FixedUpdate()
+
+
+void FixedUpdate()
+{
+    // Fysik-steget bruges ikke til at flytte kassen mens den holdes.
+    // Position og rotation håndteres i LateUpdate for glat bevægelse.
+    if (!_isHeld) return;
+
+    _rb.linearVelocity = Vector3.zero;
+    _rb.angularVelocity = Vector3.zero;
+}
+
+void LateUpdate()
+{
+    if (!_isHeld) return;
+
+    // ── Position ──────────────────────────────────────────────
+    // LateUpdate kører efter Update (og efter kamera-bevægelse),
+    // så kassen følger kameraet frame-perfekt uden hak.
+    Vector3 targetPos = _cam.transform.position
+                      + _cam.transform.forward * holdDistance
+                      + _cam.transform.right * holdOffset.x
+                      + _cam.transform.up * holdOffset.y
+                      + _cam.transform.forward * holdOffset.z;
+
+    _rb.MovePosition(targetPos);
+
+    // ── Rotation ──────────────────────────────────────────────
+    float cameraYaw = _cam.transform.eulerAngles.y;
+    Quaternion upright = Quaternion.Euler(uprightOffset);
+    Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
+    Quaternion targetRot = yawRot * upright;
+
+    _rb.MoveRotation(targetRot);
+}
+
+// ──────────────────────────────────────────────────────────────
+void TryPickup()
+{
+    Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
+
+    if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
     {
-        // Fysik-steget bruges ikke til at flytte kassen mens den holdes.
-        // Position og rotation håndteres i LateUpdate for glat bevægelse.
-        if (!_isHeld) return;
-
-        _rb.linearVelocity = Vector3.zero;
-        _rb.angularVelocity = Vector3.zero;
+        if (hit.transform == transform || hit.transform.IsChildOf(transform))
+            Pickup();
     }
+}
 
-    void LateUpdate()
+void Pickup()
+{
+    _isHeld = true;
+    IsHoldingItem = true;
+
+    _rb.useGravity = false;
+    _rb.freezeRotation = false;
+
+    int heldLayer = LayerMask.NameToLayer(HeldLayerName);
+    if (heldLayer != -1)
+        gameObject.layer = heldLayer;
+
+    if (_player != null)
+        _player.weightMultiplier = Mathf.Max(0f, 1f - weight / (_player.maxCarryWeight + weight));
+
+    scannerAnimator?.Hide();
+
+    Debug.Log($"[PickupObject] Samlede op: {gameObject.name} ({weight} kg)");
+}
+
+void PutDown()
+{
+    _isHeld = false;
+    IsHoldingItem = false;
+
+    _rb.useGravity = true;
+    _rb.freezeRotation = false;
+    _rb.angularVelocity = Vector3.zero;
+    _rb.linearVelocity = Vector3.down * 0.5f;
+    gameObject.layer = _originalLayer;
+
+    if (_player != null)
+        _player.weightMultiplier = 1f;
+
+    scannerAnimator?.Show();
+
+    Debug.Log($"[PickupObject] Satte ned: {gameObject.name}");
+}
+
+// ── Editor-gizmo ──────────────────────────────────────────────
+void OnDrawGizmosSelected()
+{
+    Gizmos.color = new Color(0f, 1f, 0.4f, 0.4f);
+    Gizmos.DrawWireSphere(transform.position, pickupRange);
+
+    Camera sceneCamera = Camera.main;
+    if (sceneCamera != null)
     {
-        if (!_isHeld) return;
-
-        // ── Position ──────────────────────────────────────────────
-        // LateUpdate kører efter Update (og efter kamera-bevægelse),
-        // så kassen følger kameraet frame-perfekt uden hak.
-        Vector3 targetPos = _cam.transform.position
-                          + _cam.transform.forward * holdDistance
-                          + _cam.transform.right * holdOffset.x
-                          + _cam.transform.up * holdOffset.y
-                          + _cam.transform.forward * holdOffset.z;
-
-        _rb.MovePosition(targetPos);
-
-        // ── Rotation ──────────────────────────────────────────────
-        float cameraYaw = _cam.transform.eulerAngles.y;
-        Quaternion upright = Quaternion.Euler(uprightOffset);
-        Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
-        Quaternion targetRot = yawRot * upright;
-
-        _rb.MoveRotation(targetRot);
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawRay(sceneCamera.transform.position,
+                       sceneCamera.transform.forward * pickupRange);
     }
-
-    // ──────────────────────────────────────────────────────────────
-    void TryPickup()
-    {
-        Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
-
-        if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
-        {
-            if (hit.transform == transform || hit.transform.IsChildOf(transform))
-                Pickup();
-        }
-    }
-
-    void Pickup()
-    {
-        _isHeld = true;
-
-        _rb.useGravity = false;
-        _rb.freezeRotation = false;
-
-        int heldLayer = LayerMask.NameToLayer(HeldLayerName);
-        if (heldLayer != -1)
-            gameObject.layer = heldLayer;
-
-        if (_player != null)
-            _player.weightMultiplier = Mathf.Max(0f, 1f - weight / (_player.maxCarryWeight + weight));
-
-        Debug.Log($"[PickupObject] Samlede op: {gameObject.name} ({weight} kg)");
-    }
-
-    void PutDown()
-    {
-        _isHeld = false;
-
-        _rb.useGravity = true;
-        _rb.freezeRotation = false;
-        _rb.angularVelocity = Vector3.zero;
-        _rb.linearVelocity = Vector3.down * 0.5f;
-        gameObject.layer = _originalLayer;
-
-        if (_player != null)
-            _player.weightMultiplier = 1f;
-
-        Debug.Log($"[PickupObject] Satte ned: {gameObject.name}");
-    }
-
-    // ── Editor-gizmo ──────────────────────────────────────────────
-    void OnDrawGizmosSelected()
-    {
-        Gizmos.color = new Color(0f, 1f, 0.4f, 0.4f);
-        Gizmos.DrawWireSphere(transform.position, pickupRange);
-
-        Camera sceneCamera = Camera.main;
-        if (sceneCamera != null)
-        {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawRay(sceneCamera.transform.position,
-                           sceneCamera.transform.forward * pickupRange);
-        }
-    }
+}
 }
