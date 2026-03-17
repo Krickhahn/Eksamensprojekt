@@ -53,6 +53,12 @@ public class ScannerDisplay : MonoBehaviour
     [Tooltip("Maks afstand for scanning.")]
     public float scanRange = 3f;
 
+    [Tooltip("Layer mask til scanning — ekskludér layers du ikke vil ramme (f.eks. DeliveryZone-layeret).\nDefault er Everything.")]
+    public LayerMask scanLayerMask = ~0;
+
+    [Tooltip("ScannerLight-komponenten der flasher når skanneren bruges. Valgfrit.")]
+    public ScannerLight scannerLight;
+
     // ── Private ────────────────────────────────────────────────────
     private Camera _cam;
     private Coroutine _displayRoutine;
@@ -68,10 +74,13 @@ public class ScannerDisplay : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetMouseButtonDown(0)
-            && Cursor.lockState == CursorLockMode.Locked
-            && !PickupObject.IsHoldingItem)
-            TryScan();
+        if (Input.GetMouseButtonDown(0) && Cursor.lockState == CursorLockMode.Locked)
+        {
+            scannerLight?.Flash();
+
+            if (!PickupObject.IsHoldingItem)
+                TryScan();
+        }
     }
 
     // ── Offentlige metoder kaldt af OrderManager ───────────────────
@@ -97,6 +106,16 @@ public class ScannerDisplay : MonoBehaviour
     public void ShowOrderComplete(Order order)
     {
         SetLoop("DONE", colorSuccess);
+    }
+
+    public void ShowStandBy()
+    {
+        SetLoop("STAND BY", colorNormal);
+    }
+
+    public void ShowGoToOffice()
+    {
+        SetLoop("GA TIL KONTORET", colorNormal);
     }
 
     public void ShowAllComplete()
@@ -140,15 +159,24 @@ public class ScannerDisplay : MonoBehaviour
     {
         if (_cam == null) return;
 
+        // Vis laser-stråle uanset om der rammes noget
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
 
-        if (!Physics.Raycast(ray, out RaycastHit hit, scanRange))
+        if (!Physics.Raycast(ray, out RaycastHit hit, scanRange, scanLayerMask))
         {
             PlayOnce("NO READ", colorNormal);
             return;
         }
 
-        // Tjek først om objektet har en ScanMessage
+        // Tjek om objektet er en OrderStation
+        OrderStation station = hit.collider.GetComponentInParent<OrderStation>();
+        if (station != null)
+        {
+            station.OnScanned();
+            return;
+        }
+
+        // Tjek om objektet har en ScanMessage
         ScanMessage scanMsg = hit.collider.GetComponentInParent<ScanMessage>();
         if (scanMsg != null)
         {

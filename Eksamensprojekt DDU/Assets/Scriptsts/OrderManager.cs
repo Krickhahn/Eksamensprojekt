@@ -19,7 +19,7 @@ public class OrderManager : MonoBehaviour
 
     // ── Inspector ──────────────────────────────────────────────────
     [Header("Pulje — tilføj alle pakker og zoner her")]
-    [Tooltip("Alle Scannable-pakker der findes i scenen (trækkes ind manuelt).")]
+    [Tooltip("Alle Scannable-pakker i scenen. Udfyldes automatisk af PackageSpawner ved runtime — du behøver ikke trække dem ind manuelt.")]
     public List<Scannable> allPackages = new List<Scannable>();
 
     [Tooltip("Alle DeliveryZone-objekter der findes i scenen (trækkes ind manuelt).")]
@@ -31,6 +31,10 @@ public class OrderManager : MonoBehaviour
 
     [Tooltip("Blander pakke-puljen tilfældigt inden session starter.")]
     public bool shufflePackages = true;
+
+    [Tooltip("Hvis true gives den første ordre automatisk når spillet starter.\n" +
+             "Hvis false skal spilleren scanne en OrderStation for at få første ordre.")]
+    public bool autoStart = true;
 
     // Genereret ved runtime — ikke vist i Inspector
     private List<Order> orders = new List<Order>();
@@ -54,6 +58,7 @@ public class OrderManager : MonoBehaviour
 
     // ── Runtime state ──────────────────────────────────────────────
     private int _currentIndex = -1;
+    private int _nextIndex = 0;  // næste ordre der venter på at blive givet
 
     /// <summary>Den aktive ordre. Null hvis ingen ordre er aktiv.</summary>
     public Order CurrentOrder => (_currentIndex >= 0 && _currentIndex < orders.Count)
@@ -73,12 +78,37 @@ public class OrderManager : MonoBehaviour
 
     void Start()
     {
+        // Vent til næste frame så PackageSpawner når at registrere pakker
+        StartCoroutine(StartDelayed());
+    }
+
+    System.Collections.IEnumerator StartDelayed()
+    {
+        yield return null; // ét frame — PackageSpawner kører i Start()
         GenerateOrders();
 
-        if (orders.Count > 0)
+        if (orders.Count == 0)
+        {
+            Debug.LogWarning("[OrderManager] Kunne ikke generere ordrer — tjek at pakker og zoner er tilføjet!");
+            yield break;
+        }
+
+        _nextIndex = 0;
+
+        if (autoStart)
             ActivateOrder(0);
         else
-            Debug.LogWarning("[OrderManager] Kunne ikke generere ordrer — tjek at pakker og zoner er tilføjet!");
+            scannerDisplay?.ShowStandBy();
+    }
+
+    /// <summary>
+    /// Registrerer en pakke der er spawned af PackageSpawner.
+    /// Skal kaldes inden GenerateOrders kører (dvs. i PackageSpawner.Start).
+    /// </summary>
+    public void RegisterPackage(Scannable pkg)
+    {
+        if (pkg != null && !allPackages.Contains(pkg))
+            allPackages.Add(pkg);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -112,11 +142,8 @@ public class OrderManager : MonoBehaviour
                     ? availablePackages.Count
                     : Mathf.Min(ordersPerSession, availablePackages.Count);
 
-        // Par hver pakke med en kompatibel zone
-        // En zone er kompatibel hvis dens requiredItemID er tomt,
-        // eller pakken starter med det krævede præfiks
         int attempts = 0;
-        int maxAttempts = count * allZones.Count * 2; // undgå uendelig løkke
+        int maxAttempts = count * allZones.Count * 2;
 
         while (orders.Count < count && attempts < maxAttempts)
         {
@@ -132,44 +159,43 @@ public class OrderManager : MonoBehaviour
 
             if (compatibleZones.Count == 0)
             {
-                Debug.LogWarning($"[OrderManager] Ingen kompatibel zone fundet til pakke '{pkg.itemID}' — springer over.");
+                Debug.LogWarning($"[OrderManager] Ingen kompatibel zone til '{pkg.itemID}' — springer over.");
                 availablePackages.Remove(pkg);
                 if (availablePackages.Count == 0) break;
                 continue;
             }
 
-            // Vælg en tilfældig kompatibel zone
             DeliveryZone zone = compatibleZones[Random.Range(0, compatibleZones.Count)];
-
-            string resolvedName = !string.IsNullOrEmpty(pkg.itemName) ? pkg.itemName
-                                  : !string.IsNullOrEmpty(pkg.itemID) ? pkg.itemID
-                                  : pkg.gameObject.name;
-
-            Debug.Log($"[OrderManager] Pakke: '{pkg.gameObject.name}' | itemID='{pkg.itemID}' | itemName='{pkg.itemName}' | bruger: '{resolvedName}'");
-
-            orders.Add(new Order
-            {
-                itemID = pkg.itemID,
-                itemName = resolvedName,
-                deliveryZone = zone,
-            });
-
-            // Fjern pakken så den ikke bruges igen i denne session
+            AddOrder(pkg, zone);
             availablePackages.Remove(pkg);
 
-            // Fjern kun zonen hvis den har et krævet præfiks —
-            // tomme zoner kan modtage mange forskellige pakker og genbruges
+            // Zoner med præfiks fjernes efter brug — åbne zoner genbruges
             if (!string.IsNullOrEmpty(zone.requiredItemID))
                 availableZones.Remove(zone);
 
-            // Stop hvis der ikke er flere pakker
             if (availablePackages.Count == 0) break;
         }
 
         if (orders.Count == 0)
             Debug.LogError("[OrderManager] Kunne ikke generere nogen ordrer — tjek at pakke-ID'er matcher zone-præfikser!");
         else
-            Debug.Log($"[OrderManager] Genererede {orders.Count} kompatible ordrer.");
+            Debug.Log($"[OrderManager] Genererede {orders.Count} ordrer.");
+    }
+
+    void AddOrder(Scannable pkg, DeliveryZone zone)
+    {
+        string resolvedName = !string.IsNullOrEmpty(pkg.itemName) ? pkg.itemName
+                              : !string.IsNullOrEmpty(pkg.itemID) ? pkg.itemID
+                              : pkg.gameObject.name;
+
+        Debug.Log($"[OrderManager] Ordre: '{resolvedName}' ({pkg.itemID}) → {zone.zoneName}");
+
+        orders.Add(new Order
+        {
+            itemID = pkg.itemID,
+            itemName = resolvedName,
+            deliveryZone = zone,
+        });
     }
 
     static void Shuffle<T>(List<T> list)
@@ -196,62 +222,44 @@ public class OrderManager : MonoBehaviour
         // ── Scanning en pakke ──────────────────────────────────────
         if (scanned.type == Scannable.ScanType.Package)
         {
-            if (order.itemConfirmed)
-                return ScanResult.AlreadyConfirmed;
+            if (scanned.itemID != order.itemID)
+            {
+                scannerDisplay?.ShowWrongItem(scanned.itemID, order.itemID);
+                return ScanResult.WrongItem;
+            }
 
-            if (scanned.itemID == order.itemID)
+            // Første scanning — bekræft pakken og vis destination
+            if (!order.itemConfirmed)
             {
                 order.itemConfirmed = true;
                 onItemConfirmed?.Invoke(order);
                 scannerDisplay?.ShowItemConfirmed(order);
                 return ScanResult.ItemCorrect;
             }
-            else
-            {
-                scannerDisplay?.ShowWrongItem(scanned.itemID, order.itemID);
-                return ScanResult.WrongItem;
-            }
-        }
 
-        // ── Scanning en afleveringszone ────────────────────────────
-        if (scanned.type == Scannable.ScanType.DeliveryZone)
-        {
-            if (!order.itemConfirmed)
+            // Anden scanning — tjek om pakken er i den rigtige zone
+            DeliveryZone correctZone = order.deliveryZone;
+
+            if (correctZone.PackageInZone == null)
             {
-                scannerDisplay?.ShowScanPackageFirst();
-                return ScanResult.ItemNotConfirmedYet;
+                scannerDisplay?.ShowPackageNotInZone(correctZone);
+                return ScanResult.PackageNotInZone;
             }
 
-            if (scanned.deliveryZone == order.deliveryZone)
+            Scannable pkgInZone = correctZone.PackageInZone.GetComponent<Scannable>();
+            if (pkgInZone == null || pkgInZone.itemID != order.itemID)
             {
-                // Tjek at pakken fysisk ligger inden for zonen
-                DeliveryZone zone = scanned.deliveryZone;
-                if (zone.PackageInZone == null)
-                {
-                    scannerDisplay?.ShowPackageNotInZone(zone);
-                    return ScanResult.PackageNotInZone;
-                }
-
-                // Tjek at pakken i zonen er den rigtige pakke
-                Scannable pkg = zone.PackageInZone.GetComponent<Scannable>();
-                if (pkg == null || pkg.itemID != order.itemID)
-                {
-                    scannerDisplay?.ShowWrongPackageInZone(order.itemID);
-                    return ScanResult.PackageNotInZone;
-                }
-
-                order.delivered = true;
-                onOrderComplete?.Invoke(order);
-                scannerDisplay?.ShowOrderComplete(order);
-                Debug.Log($"[OrderManager] Ordre {_currentIndex + 1}/{orders.Count} fuldført: {order.itemID}");
-                AdvanceToNextOrder();
-                return ScanResult.OrderComplete;
+                scannerDisplay?.ShowWrongPackageInZone(order.itemID);
+                return ScanResult.PackageNotInZone;
             }
-            else
-            {
-                scannerDisplay?.ShowWrongZone(order.deliveryZone);
-                return ScanResult.WrongZone;
-            }
+
+            // Pakken er i den rigtige zone — ordre fuldført
+            order.delivered = true;
+            onOrderComplete?.Invoke(order);
+            scannerDisplay?.ShowOrderComplete(order);
+            Debug.Log($"[OrderManager] Ordre {_currentIndex + 1}/{orders.Count} fuldført: {order.itemID}");
+            AdvanceToNextOrder();
+            return ScanResult.OrderComplete;
         }
 
         return ScanResult.Unknown;
@@ -278,23 +286,50 @@ public class OrderManager : MonoBehaviour
 
     void AdvanceToNextOrder()
     {
-        // Sluk highlight på forrige zones
+        // Sluk highlight på forrige zone
         if (CurrentOrder != null)
             CurrentOrder.deliveryZone?.SetHighlight(false);
 
-        int next = _currentIndex + 1;
+        _currentIndex = -1; // ingen aktiv ordre
+        _nextIndex = orders.FindIndex(o => !o.delivered);
 
-        if (next < orders.Count)
+        if (_nextIndex >= 0)
         {
-            ActivateOrder(next);
+            if (autoStart)
+            {
+                // Autostart: giv næste ordre med det samme
+                ActivateOrder(_nextIndex);
+            }
+            else
+            {
+                // Manuel: vent på at spilleren scanner OrderStation
+                scannerDisplay?.ShowGoToOffice();
+                Debug.Log("[OrderManager] Afventer scanning af OrderStation for næste ordre.");
+            }
         }
         else
         {
-            _currentIndex = -1;
             onAllOrdersComplete?.Invoke();
             scannerDisplay?.ShowAllComplete();
             Debug.Log("[OrderManager] Alle ordrer er fuldført!");
         }
+    }
+
+    /// <summary>Returnerer true hvis der er flere ordrer der ikke er afleveret endnu.</summary>
+    public bool HasMoreOrders()
+    {
+        return orders.Exists(o => !o.delivered) && _currentIndex < 0;
+    }
+
+    /// <summary>
+    /// Aktiverer næste ventende ordre.
+    /// Kaldes af OrderStation når spilleren scanner kontorstationen.
+    /// </summary>
+    public void GiveNextOrder()
+    {
+        int idx = orders.FindIndex(o => !o.delivered);
+        if (idx >= 0)
+            ActivateOrder(idx);
     }
 }
 

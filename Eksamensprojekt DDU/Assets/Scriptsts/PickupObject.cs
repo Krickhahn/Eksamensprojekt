@@ -31,6 +31,9 @@ public class PickupObject : MonoBehaviour
     [Tooltip("Afstand foran kameraet objektet holdes.")]
     public float holdDistance = 1.5f;
 
+    [Tooltip("Hvor hurtigt kassen følger med til mål-positionen.\nHøjere = strammere/hurtigere. Lavere = mere svævende/tung følelse.\nPrøv 8-15 for en naturlig følelse.")]
+    public float followSpeed = 10f;
+
     [Tooltip("Fin-juster position (x = side, y = op/ned, z = frem/tilbage ekstra).")]
     public Vector3 holdOffset = new Vector3(0f, -0.1f, 0f);
 
@@ -60,6 +63,7 @@ public class PickupObject : MonoBehaviour
     private int _originalLayer;
     private PlayerMovement _player;
     private const string HeldLayerName = "HeldObject";
+    private RigidbodyInterpolation _originalInterpolation;
 
     /// <summary>True hvis spilleren pt. holder et objekt. Bruges af ScannerDisplay.</summary>
     public static bool IsHoldingItem { get; private set; }
@@ -97,12 +101,10 @@ public class PickupObject : MonoBehaviour
 
 
 
+
 void FixedUpdate()
 {
-    // Fysik-steget bruges ikke til at flytte kassen mens den holdes.
-    // Position og rotation håndteres i LateUpdate for glat bevægelse.
     if (!_isHeld) return;
-
     _rb.linearVelocity = Vector3.zero;
     _rb.angularVelocity = Vector3.zero;
 }
@@ -112,23 +114,30 @@ void LateUpdate()
     if (!_isHeld) return;
 
     // ── Position ──────────────────────────────────────────────
-    // LateUpdate kører efter Update (og efter kamera-bevægelse),
-    // så kassen følger kameraet frame-perfekt uden hak.
+    // Vi bruger transform.position direkte i stedet for MovePosition
+    // så bevægelsen er fuldt synkroniseret med kameraet hvert frame
+    // uden at gå igennem fysikmotorens interpolation.
     Vector3 targetPos = _cam.transform.position
                       + _cam.transform.forward * holdDistance
                       + _cam.transform.right * holdOffset.x
                       + _cam.transform.up * holdOffset.y
                       + _cam.transform.forward * holdOffset.z;
 
-    _rb.MovePosition(targetPos);
+    transform.position = Vector3.Lerp(
+        transform.position,
+        targetPos,
+        1f - Mathf.Exp(-followSpeed * Time.deltaTime)
+    );
 
     // ── Rotation ──────────────────────────────────────────────
+    // Kun kameraets vandrette drejning (yaw) bruges — pitch ignoreres
+    // så kassen ikke tipper når man kigger op/ned.
     float cameraYaw = _cam.transform.eulerAngles.y;
-    Quaternion upright = Quaternion.Euler(uprightOffset);
     Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
+    Quaternion upright = Quaternion.Euler(uprightOffset);
     Quaternion targetRot = yawRot * upright;
 
-    _rb.MoveRotation(targetRot);
+    transform.rotation = targetRot;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -148,6 +157,10 @@ void Pickup()
     _isHeld = true;
     IsHoldingItem = true;
 
+    // Sæt kinematic så fysikken ikke kæmper mod vores transform-opdateringer
+    _originalInterpolation = _rb.interpolation;
+    _rb.isKinematic = true;
+    _rb.interpolation = RigidbodyInterpolation.None;
     _rb.useGravity = false;
     _rb.freezeRotation = false;
 
@@ -168,6 +181,9 @@ void PutDown()
     _isHeld = false;
     IsHoldingItem = false;
 
+    // Gendan fysik
+    _rb.isKinematic = false;
+    _rb.interpolation = _originalInterpolation;
     _rb.useGravity = true;
     _rb.freezeRotation = false;
     _rb.angularVelocity = Vector3.zero;
