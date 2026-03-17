@@ -180,6 +180,9 @@ MonoBehaviour:
   type: 0
   itemID: PKG
   itemName: 001
+  deliveryPoints: 100
+  isFragile: 0
+  fragileDropPenalty: 25
   deliveryZone: {fileID: 0}
 --- !u!1 &4084913861453895869
 GameObject:

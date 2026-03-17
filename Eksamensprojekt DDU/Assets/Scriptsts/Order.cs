@@ -22,4 +22,13 @@ public class Order
 
     /// <summary>Sat til true når pakken er afleveret på korrekt zone.</summary>
     [System.NonSerialized] public bool delivered;
+
+    /// <summary>Antal point der blev tjent for denne levering (efter fragile-straf).</summary>
+    [System.NonSerialized] public int earnedPoints;
+
+    /// <summary>Antal point pakken er værd ved levering.</summary>
+    [System.NonSerialized] public int basePoints;
+
+    /// <summary>Akkumulerede straffe for denne pakke (fragile fald).</summary>
+    [System.NonSerialized] public int penaltiesAccrued;
 }

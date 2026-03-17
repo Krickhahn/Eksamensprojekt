@@ -212,6 +212,9 @@ MonoBehaviour:
   type: 0
   itemID: B3-002
   itemName: 
+  deliveryPoints: 100
+  isFragile: 0
+  fragileDropPenalty: 25
   deliveryZone: {fileID: 0}
 --- !u!1 &5008602838063171105
 GameObject:

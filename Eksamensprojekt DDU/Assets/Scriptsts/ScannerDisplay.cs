@@ -103,9 +103,25 @@ public class ScannerDisplay : MonoBehaviour
         );
     }
 
-    public void ShowOrderComplete(Order order)
+    public void ShowOrderComplete(Order order, System.Action onFinished = null)
     {
-        SetLoop("DONE", colorSuccess);
+        // Ruller point-beskeden én gang — kalder onFinished når den er færdig
+        StartDisplay(ScrollOnceThen(
+            $"DONE +{order.earnedPoints}PT",
+            colorSuccess,
+            onFinished
+        ));
+    }
+
+    /// <summary>
+    /// Ruller en besked én gang og kalder en callback når den er færdig.
+    /// Loop-beskeden genoptages IKKE automatisk — det er op til callback'en.
+    /// </summary>
+    IEnumerator ScrollOnceThen(string message, Color color, System.Action onFinished)
+    {
+        float delay = 1f / Mathf.Max(0.1f, scrollSpeed);
+        yield return ScrollAcross(message, color, delay);
+        onFinished?.Invoke();
     }
 
     public void ShowStandBy()

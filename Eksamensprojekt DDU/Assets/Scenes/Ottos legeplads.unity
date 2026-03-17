@@ -1461,6 +1461,9 @@ MonoBehaviour:
   type: 1
   itemID: 
   itemName: 
+  deliveryPoints: 100
+  isFragile: 0
+  fragileDropPenalty: 25
   deliveryZone: {fileID: 665082757}
 --- !u!114 &665082757
 MonoBehaviour:
@@ -1692,6 +1695,9 @@ MonoBehaviour:
   type: 1
   itemID: 
   itemName: 
+  deliveryPoints: 100
+  isFragile: 0
+  fragileDropPenalty: 25
   deliveryZone: {fileID: 789271110}
 --- !u!4 &789271113
 Transform:
@@ -1740,7 +1746,7 @@ MonoBehaviour:
   displayText: {fileID: 397160703}
   displayWidth: 12
   leadingSpaces: 0
-  scrollSpeed: 8
+  scrollSpeed: 10
   loopPause: 1
   colorNormal: {r: 0.8, g: 1, b: 0.8, a: 1}
   colorSuccess: {r: 0.3, g: 1, b: 0.4, a: 1}
@@ -2195,6 +2201,37 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1 &1568999740
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1568999741}
+  m_Layer: 0
+  m_Name: ScoreManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1568999741
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1568999740}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.13311, y: 1.55168, z: 0.34536}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1590203462
 GameObject:
   m_ObjectHideFlags: 0
@@ -2334,7 +2371,7 @@ MonoBehaviour:
   allZones:
   - {fileID: 665082757}
   - {fileID: 789271110}
-  ordersPerSession: 4
+  ordersPerSession: 5
   shufflePackages: 1
   autoStart: 0
   scannerDisplay: {fileID: 897648138}
@@ -3396,3 +3433,4 @@ SceneRoots:
   - {fileID: 1756313045}
   - {fileID: 1195627563}
   - {fileID: 1744961258}
+  - {fileID: 1568999741}

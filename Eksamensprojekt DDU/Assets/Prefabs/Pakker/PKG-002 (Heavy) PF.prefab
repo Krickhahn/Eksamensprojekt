@@ -301,7 +301,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Scannable
   type: 0
   itemID: PKG
-  itemName: 002
+  itemName: 002-Heavy
+  deliveryPoints: 175
+  isFragile: 0
+  fragileDropPenalty: 25
   deliveryZone: {fileID: 0}
 --- !u!1 &8574179873367283839
 GameObject:

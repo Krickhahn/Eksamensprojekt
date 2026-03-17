@@ -195,6 +195,7 @@ public class OrderManager : MonoBehaviour
             itemID = pkg.itemID,
             itemName = resolvedName,
             deliveryZone = zone,
+            basePoints = pkg.deliveryPoints,
         });
     }
 
@@ -255,10 +256,13 @@ public class OrderManager : MonoBehaviour
 
             // Pakken er i den rigtige zone — ordre fuldført
             order.delivered = true;
+            order.earnedPoints = Mathf.Max(0, order.basePoints - order.penaltiesAccrued);
+            ScoreManager.Instance?.AddScore(order.earnedPoints);
             onOrderComplete?.Invoke(order);
-            scannerDisplay?.ShowOrderComplete(order);
-            Debug.Log($"[OrderManager] Ordre {_currentIndex + 1}/{orders.Count} fuldført: {order.itemID}");
-            AdvanceToNextOrder();
+
+            // Vent til point-beskeden er rullet færdig inden næste besked
+            Debug.Log($"[OrderManager] Ordre fuldført: {order.itemID} +{order.earnedPoints} point (base: {order.basePoints}, straf: {order.penaltiesAccrued})");
+            scannerDisplay?.ShowOrderComplete(order, () => AdvanceToNextOrder());
             return ScanResult.OrderComplete;
         }
 
