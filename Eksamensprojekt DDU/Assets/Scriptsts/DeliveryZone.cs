@@ -22,6 +22,11 @@ public class DeliveryZone : MonoBehaviour
              "Lad feltet stå tomt for at acceptere alle pakker.")]
     public string requiredItemID = "";
 
+    [Header("Gizmo")]
+    [Tooltip("Vis afleveringszonen i Scene View.")]
+    public bool showGizmo = true;
+    public Color gizmoColor = new Color(1f, 0.5f, 0f, 0.25f);
+
     [Header("Visuals")]
     [Tooltip("Renderer der skifter materiale når zonen er aktiv. Kan være en pil, lysring, mm.")]
     public Renderer highlightRenderer;
@@ -62,6 +67,43 @@ public class DeliveryZone : MonoBehaviour
         if (pkg != null && pkg == PackageInZone)
             PackageInZone = null;
         Debug.Log($"[DeliveryZone] {gameObject.name}: pakke forlod zonen.");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    void Awake()
+    {
+        // Sæt automatisk layer til "DeliveryZone" så scanner-raycastet kan ignorere det
+        int layer = LayerMask.NameToLayer("DeliveryZone");
+        if (layer != -1)
+            gameObject.layer = layer;
+        else
+            Debug.LogWarning("[DeliveryZone] Layer 'DeliveryZone' findes ikke — opret det i Project Settings → Tags and Layers.");
+    }
+
+    // ── Gizmo ─────────────────────────────────────────────────────
+    void OnDrawGizmos()
+    {
+        if (!showGizmo) return;
+
+        // Hent størrelsen fra trigger-collideren hvis den findes
+        Collider col = GetComponent<Collider>();
+        Vector3 size = col != null ? col.bounds.size : Vector3.one;
+        Vector3 center = col != null ? col.bounds.center : transform.position;
+
+        Gizmos.color = gizmoColor;
+        Gizmos.DrawCube(center, size);
+
+        Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
+        Gizmos.DrawWireCube(center, size);
+
+        // Vis zone-navn og præfiks som label
+#if UNITY_EDITOR
+        string label = string.IsNullOrEmpty(requiredItemID)
+            ? zoneName
+            : $"{zoneName} [{requiredItemID}]";
+        UnityEditor.Handles.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
+        UnityEditor.Handles.Label(center + Vector3.up * (size.y * 0.5f + 0.1f), label);
+#endif
     }
 
     // ──────────────────────────────────────────────────────────────

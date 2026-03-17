@@ -31,6 +31,9 @@ public class PickupObject : MonoBehaviour
     [Tooltip("Afstand foran kameraet objektet holdes.")]
     public float holdDistance = 1.5f;
 
+    [Tooltip("Hvor hurtigt kassen følger med til mål-positionen.\nHøjere = strammere/hurtigere. Lavere = mere svævende/tung følelse.\nPrøv 8-15 for en naturlig følelse.")]
+    public float followSpeed = 10f;
+
     [Tooltip("Fin-juster position (x = side, y = op/ned, z = frem/tilbage ekstra).")]
     public Vector3 holdOffset = new Vector3(0f, -0.1f, 0f);
 
@@ -60,6 +63,8 @@ public class PickupObject : MonoBehaviour
     private int _originalLayer;
     private PlayerMovement _player;
     private const string HeldLayerName = "HeldObject";
+    private RigidbodyInterpolation _originalInterpolation;
+    private Scannable _scannable;
 
     /// <summary>True hvis spilleren pt. holder et objekt. Bruges af ScannerDisplay.</summary>
     public static bool IsHoldingItem { get; private set; }
@@ -69,6 +74,7 @@ public class PickupObject : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody>();
         _cam = Camera.main;
+        _scannable = GetComponent<Scannable>();
 
         if (_cam == null)
             Debug.LogWarning("[PickupObject] Intet kamera med 'MainCamera'-tag fundet!");
@@ -97,103 +103,166 @@ public class PickupObject : MonoBehaviour
 
 
 
-void FixedUpdate()
-{
-    // Fysik-steget bruges ikke til at flytte kassen mens den holdes.
-    // Position og rotation håndteres i LateUpdate for glat bevægelse.
-    if (!_isHeld) return;
 
-    _rb.linearVelocity = Vector3.zero;
-    _rb.angularVelocity = Vector3.zero;
-}
+    // FixedUpdate er ikke nødvendig — pakken er kinematic mens den holdes
+    // og velocity håndteres ikke via fysikken under hold
 
-void LateUpdate()
-{
-    if (!_isHeld) return;
-
-    // ── Position ──────────────────────────────────────────────
-    // LateUpdate kører efter Update (og efter kamera-bevægelse),
-    // så kassen følger kameraet frame-perfekt uden hak.
-    Vector3 targetPos = _cam.transform.position
-                      + _cam.transform.forward * holdDistance
-                      + _cam.transform.right * holdOffset.x
-                      + _cam.transform.up * holdOffset.y
-                      + _cam.transform.forward * holdOffset.z;
-
-    _rb.MovePosition(targetPos);
-
-    // ── Rotation ──────────────────────────────────────────────
-    float cameraYaw = _cam.transform.eulerAngles.y;
-    Quaternion upright = Quaternion.Euler(uprightOffset);
-    Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
-    Quaternion targetRot = yawRot * upright;
-
-    _rb.MoveRotation(targetRot);
-}
-
-// ──────────────────────────────────────────────────────────────
-void TryPickup()
-{
-    Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
-
-    if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
+    void LateUpdate()
     {
-        if (hit.transform == transform || hit.transform.IsChildOf(transform))
-            Pickup();
+        if (!_isHeld) return;
+
+        // ── Position ──────────────────────────────────────────────
+        // Vi bruger transform.position direkte i stedet for MovePosition
+        // så bevægelsen er fuldt synkroniseret med kameraet hvert frame
+        // uden at gå igennem fysikmotorens interpolation.
+        Vector3 targetPos = _cam.transform.position
+                          + _cam.transform.forward * holdDistance
+                          + _cam.transform.right * holdOffset.x
+                          + _cam.transform.up * holdOffset.y
+                          + _cam.transform.forward * holdOffset.z;
+
+        transform.position = Vector3.Lerp(
+            transform.position,
+            targetPos,
+            1f - Mathf.Exp(-followSpeed * Time.deltaTime)
+        );
+
+        // ── Rotation ──────────────────────────────────────────────
+        // Kun kameraets vandrette drejning (yaw) bruges — pitch ignoreres
+        // så kassen ikke tipper når man kigger op/ned.
+        float cameraYaw = _cam.transform.eulerAngles.y;
+        Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
+        Quaternion upright = Quaternion.Euler(uprightOffset);
+        Quaternion targetRot = yawRot * upright;
+
+        transform.rotation = targetRot;
     }
-}
 
-void Pickup()
-{
-    _isHeld = true;
-    IsHoldingItem = true;
-
-    _rb.useGravity = false;
-    _rb.freezeRotation = false;
-
-    int heldLayer = LayerMask.NameToLayer(HeldLayerName);
-    if (heldLayer != -1)
-        gameObject.layer = heldLayer;
-
-    if (_player != null)
-        _player.weightMultiplier = Mathf.Max(0f, 1f - weight / (_player.maxCarryWeight + weight));
-
-    scannerAnimator?.Hide();
-
-    Debug.Log($"[PickupObject] Samlede op: {gameObject.name} ({weight} kg)");
-}
-
-void PutDown()
-{
-    _isHeld = false;
-    IsHoldingItem = false;
-
-    _rb.useGravity = true;
-    _rb.freezeRotation = false;
-    _rb.angularVelocity = Vector3.zero;
-    _rb.linearVelocity = Vector3.down * 0.5f;
-    gameObject.layer = _originalLayer;
-
-    if (_player != null)
-        _player.weightMultiplier = 1f;
-
-    scannerAnimator?.Show();
-
-    Debug.Log($"[PickupObject] Satte ned: {gameObject.name}");
-}
-
-// ── Editor-gizmo ──────────────────────────────────────────────
-void OnDrawGizmosSelected()
-{
-    Gizmos.color = new Color(0f, 1f, 0.4f, 0.4f);
-    Gizmos.DrawWireSphere(transform.position, pickupRange);
-
-    Camera sceneCamera = Camera.main;
-    if (sceneCamera != null)
+    // ──────────────────────────────────────────────────────────────
+    void TryPickup()
     {
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawRay(sceneCamera.transform.position,
-                       sceneCamera.transform.forward * pickupRange);
+        Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
+
+        if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
+        {
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                Pickup();
+        }
     }
-}
+
+    void Pickup()
+    {
+        _isHeld = true;
+        IsHoldingItem = true;
+
+        // Sæt kinematic så fysikken ikke kæmper mod vores transform-opdateringer
+        _originalInterpolation = _rb.interpolation;
+        _rb.isKinematic = true;
+        _rb.interpolation = RigidbodyInterpolation.None;
+        _rb.useGravity = false;
+        _rb.freezeRotation = false;
+
+        int heldLayer = LayerMask.NameToLayer(HeldLayerName);
+        if (heldLayer != -1)
+            gameObject.layer = heldLayer;
+
+        if (_player != null)
+            _player.weightMultiplier = Mathf.Max(0f, 1f - weight / (_player.maxCarryWeight + weight));
+
+        scannerAnimator?.Hide();
+
+        Debug.Log($"[PickupObject] Samlede op: {gameObject.name} ({weight} kg)");
+    }
+
+    void PutDown()
+    {
+        _isHeld = false;
+        IsHoldingItem = false;
+
+        // Gendan fysik
+        _rb.isKinematic = false;
+        _rb.interpolation = _originalInterpolation;
+        _rb.useGravity = true;
+        _rb.freezeRotation = false;
+        _rb.angularVelocity = Vector3.zero;
+        _rb.linearVelocity = Vector3.down * 0.5f;
+        gameObject.layer = _originalLayer;
+
+        if (_player != null)
+            _player.weightMultiplier = 1f;
+
+        scannerAnimator?.Show();
+
+        Debug.Log($"[PickupObject] Satte ned: {gameObject.name}");
+    }
+
+    // ── Fragile collision ─────────────────────────────────────────
+
+    /// <summary>
+    /// Tjekker om pakken overlapper med en afleveringszone eller spawnzone.
+    /// Bruges til at undgå straf når pakken sættes ned på et sikkert sted.
+    /// </summary>
+    bool IsInsideSafeZone()
+    {
+        Collider col = GetComponent<Collider>();
+        if (col == null) return false;
+
+        Collider[] hits = Physics.OverlapBox(
+            col.bounds.center,
+            col.bounds.extents,
+            transform.rotation
+        );
+
+        foreach (var hit in hits)
+        {
+            if (!hit.isTrigger) continue;
+            if (hit.GetComponent<DeliveryZone>() != null) return true;
+            if (hit.GetComponent<SpawnZone>() != null) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Trækker fragile-straf fra hvis alle betingelser er opfyldt.
+    /// </summary>
+    void ApplyFragilePenalty()
+    {
+        if (_scannable == null || !_scannable.isFragile) return;
+        if (_scannable.fragileDropPenalty <= 0) return;
+        if (IsInsideSafeZone()) return;
+
+        int penalty = _scannable.fragileDropPenalty;
+
+        // Registrer straffen på den aktive ordre så den kan trækkes fra ved levering
+        Order active = OrderManager.Instance?.CurrentOrder;
+        if (active != null && active.itemID == _scannable.itemID)
+            active.penaltiesAccrued += penalty;
+
+        Debug.Log($"[PickupObject] Fragile pakke ramte gulvet — -{penalty} point (akkumuleret på ordre)");
+    }
+
+    void OnCollisionEnter(Collision collision)
+    {
+        if (_isHeld) return;
+        if (_scannable == null || !_scannable.isFragile) return;
+        if (collision.gameObject.layer != 0) return;
+
+        ApplyFragilePenalty();
+    }
+
+    // ── Editor-gizmo ──────────────────────────────────────────────
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = new Color(0f, 1f, 0.4f, 0.4f);
+        Gizmos.DrawWireSphere(transform.position, pickupRange);
+
+        Camera sceneCamera = Camera.main;
+        if (sceneCamera != null)
+        {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawRay(sceneCamera.transform.position,
+                           sceneCamera.transform.forward * pickupRange);
+        }
+    }
 }

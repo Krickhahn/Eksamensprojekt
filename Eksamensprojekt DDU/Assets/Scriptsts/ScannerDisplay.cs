@@ -53,6 +53,12 @@ public class ScannerDisplay : MonoBehaviour
     [Tooltip("Maks afstand for scanning.")]
     public float scanRange = 3f;
 
+    [Tooltip("Layer mask til scanning — ekskludér layers du ikke vil ramme (f.eks. DeliveryZone-layeret).\nDefault er Everything.")]
+    public LayerMask scanLayerMask = ~0;
+
+    [Tooltip("ScannerLight-komponenten der flasher når skanneren bruges. Valgfrit.")]
+    public ScannerLight scannerLight;
+
     // ── Private ────────────────────────────────────────────────────
     private Camera _cam;
     private Coroutine _displayRoutine;
@@ -68,10 +74,13 @@ public class ScannerDisplay : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetMouseButtonDown(0)
-            && Cursor.lockState == CursorLockMode.Locked
-            && !PickupObject.IsHoldingItem)
-            TryScan();
+        if (Input.GetMouseButtonDown(0) && Cursor.lockState == CursorLockMode.Locked)
+        {
+            scannerLight?.Flash();
+
+            if (!PickupObject.IsHoldingItem)
+                TryScan();
+        }
     }
 
     // ── Offentlige metoder kaldt af OrderManager ───────────────────
@@ -94,9 +103,35 @@ public class ScannerDisplay : MonoBehaviour
         );
     }
 
-    public void ShowOrderComplete(Order order)
+    public void ShowOrderComplete(Order order, System.Action onFinished = null)
     {
-        SetLoop("DONE", colorSuccess);
+        // Ruller point-beskeden én gang — kalder onFinished når den er færdig
+        StartDisplay(ScrollOnceThen(
+            $"DONE +{order.earnedPoints}PT",
+            colorSuccess,
+            onFinished
+        ));
+    }
+
+    /// <summary>
+    /// Ruller en besked én gang og kalder en callback når den er færdig.
+    /// Loop-beskeden genoptages IKKE automatisk — det er op til callback'en.
+    /// </summary>
+    IEnumerator ScrollOnceThen(string message, Color color, System.Action onFinished)
+    {
+        float delay = 1f / Mathf.Max(0.1f, scrollSpeed);
+        yield return ScrollAcross(message, color, delay);
+        onFinished?.Invoke();
+    }
+
+    public void ShowStandBy()
+    {
+        SetLoop("STAND BY", colorNormal);
+    }
+
+    public void ShowGoToOffice()
+    {
+        SetLoop("GA TIL KONTORET", colorNormal);
     }
 
     public void ShowAllComplete()
@@ -140,15 +175,24 @@ public class ScannerDisplay : MonoBehaviour
     {
         if (_cam == null) return;
 
+        // Vis laser-stråle uanset om der rammes noget
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
 
-        if (!Physics.Raycast(ray, out RaycastHit hit, scanRange))
+        if (!Physics.Raycast(ray, out RaycastHit hit, scanRange, scanLayerMask))
         {
             PlayOnce("NO READ", colorNormal);
             return;
         }
 
-        // Tjek først om objektet har en ScanMessage
+        // Tjek om objektet er en OrderStation
+        OrderStation station = hit.collider.GetComponentInParent<OrderStation>();
+        if (station != null)
+        {
+            station.OnScanned();
+            return;
+        }
+
+        // Tjek om objektet har en ScanMessage
         ScanMessage scanMsg = hit.collider.GetComponentInParent<ScanMessage>();
         if (scanMsg != null)
         {

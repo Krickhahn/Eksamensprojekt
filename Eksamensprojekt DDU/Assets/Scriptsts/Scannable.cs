@@ -28,6 +28,15 @@ public class Scannable : MonoBehaviour
     [Tooltip("Læsbart navn der vises på displayet, f.eks. 'Fragile Box' eller 'Tung Pakke'.\nLad feltet stå tomt for at bruge itemID som navn.")]
     public string itemName = "";
 
+    [Tooltip("Antal point spilleren tjener ved korrekt levering af denne pakke.")]
+    public int deliveryPoints = 100;
+
+    [Tooltip("Fragile pakker mister point hver gang de rammer gulvet — medmindre de er i en afleveringszone.")]
+    public bool isFragile = false;
+
+    [Tooltip("Point der trækkes fra ved hvert fald (kun fragile pakker).")]
+    public int fragileDropPenalty = 25;
+
     [Header("Zone-indstillinger")]
     [Tooltip("Reference til DeliveryZone-komponenten på dette objekt (kun relevant hvis type = DeliveryZone).")]
     public DeliveryZone deliveryZone;
