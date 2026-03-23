@@ -1,49 +1,50 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// Styrer et rums lys og kommunikerer med WeepingAngelEnemy.
+/// Styrer alle lys i varehuset og aktiverer WeepingAngel når lyset slukker.
+/// Lyset slukker tilfældigt baseret på et interval.
 ///
 /// OPSÆTNING:
-///   1. Tilføj dette script til et GameObject i rummet.
-///   2. Træk rummets Light-komponent ind i roomLight.
-///   3. Træk WeepingAngelEnemy ind i angel.
-///   4. Træk AngelPowerSwitch ind i powerSwitch.
-///   5. Kald TriggerPowerFailure() fra din sabotør-fjende når den slukker lyset.
-///
-/// FLOW:
-///   TriggerPowerFailure() → lyset slukkes → statuen aktiveres
-///   AngelPowerSwitch kalder RestorePower() → cooldown → lyset tændes → statuen fryser
+///   1. Tilføj dette script til et tomt GameObject i scenen.
+///   2. Træk ALLE lys-objekter i varehuset ind i warehouseLights listen.
+///   3. Træk WeepingAngelEnemy ind i angel feltet.
+///   4. Træk AngelPowerSwitch ind i powerSwitch feltet.
+///   5. Justér minTimeBetweenFailures og maxTimeBetweenFailures.
 /// </summary>
 public class WarehouseLightController : MonoBehaviour
 {
-    // ── Singleton (per rum) ────────────────────────────────────────
     public static WarehouseLightController Instance { get; private set; }
 
     // ── Inspector ──────────────────────────────────────────────────
-    [Header("Referencer")]
-    [Tooltip("Light-komponenten der repræsenterer rummets lys.")]
-    public Light roomLight;
+    [Header("Lys")]
+    [Tooltip("Alle lys-komponenter i varehuset der slukkes ved strømsvigt.")]
+    public List<Light> warehouseLights = new List<Light>();
 
-    [Tooltip("Statuen der aktiveres når lyset slukkes.")]
+    [Tooltip("Hvor hurtigt lyset fader ud ved strømsvigt (sekunder).")]
+    public float fadeOutDuration = 0.3f;
+
+    [Tooltip("Hvor hurtigt lyset fader ind når strøm genopstår (sekunder).")]
+    public float fadeInDuration = 1.5f;
+
+    [Header("Tilfældig strømsvigt")]
+    [Tooltip("Minimum sekunder mellem strømsvigt.")]
+    public float minTimeBetweenFailures = 30f;
+
+    [Tooltip("Maksimum sekunder mellem strømsvigt.")]
+    public float maxTimeBetweenFailures = 90f;
+
+    [Tooltip("Sekunder inden første mulige strømsvigt efter spilstart.")]
+    public float initialDelay = 20f;
+
+    [Header("Referencer")]
+    [Tooltip("Weeping Angel fjenden der aktiveres ved strømsvigt.")]
     public WeepingAngelEnemy angel;
 
-    [Tooltip("Stikkontakten spilleren skal aktivere for at gendanne lyset.")]
+    [Tooltip("Stikkontakten spilleren aktiverer for at gendanne strøm.")]
     public AngelPowerSwitch powerSwitch;
-
-    [Header("Lys-indstillinger")]
-    [Tooltip("Lysstyrke når lyset er tændt.")]
-    public float lightOnIntensity = 1f;
-
-    [Tooltip("Lysstyrke når lyset er slukket (0 = helt mørkt).")]
-    public float lightOffIntensity = 0f;
-
-    [Tooltip("Sekunder det tager at fade lyset ud når det slukkes.")]
-    public float fadeOutDuration = 0.5f;
-
-    [Tooltip("Sekunder det tager at fade lyset ind når det tændes.")]
-    public float fadeInDuration = 1.5f;
 
     [Header("Events (valgfrit)")]
     public UnityEvent onLightOff;
@@ -51,7 +52,7 @@ public class WarehouseLightController : MonoBehaviour
 
     // ── Runtime state ──────────────────────────────────────────────
     private bool _isPowerOn = true;
-    private Coroutine _fadeRoutine;
+    private List<float> _originalIntensities = new List<float>();
 
     public bool IsPowerOn => _isPowerOn;
 
@@ -64,79 +65,114 @@ public class WarehouseLightController : MonoBehaviour
 
     void Start()
     {
-        if (roomLight != null)
-            roomLight.intensity = lightOnIntensity;
+        // Gem original lysstyrke for hvert lys
+        foreach (Light l in warehouseLights)
+            _originalIntensities.Add(l != null ? l.intensity : 1f);
 
-        // Sørg for at stikkontakten er deaktiveret ved start
         powerSwitch?.SetSwitchAvailable(false);
+
+        StartCoroutine(RandomFailureLoop());
     }
 
-    // ── Offentlige metoder ─────────────────────────────────────────
+    // ── Tilfældig strømsvigt ───────────────────────────────────────
 
-    /// <summary>
-    /// Slukker lyset og aktiverer statuen.
-    /// Kaldes af sabotør-fjenden eller et andet event.
-    /// </summary>
+    IEnumerator RandomFailureLoop()
+    {
+        yield return new WaitForSeconds(initialDelay);
+
+        while (true)
+        {
+            float waitTime = Random.Range(minTimeBetweenFailures, maxTimeBetweenFailures);
+            yield return new WaitForSeconds(waitTime);
+
+            if (_isPowerOn)
+                TriggerPowerFailure();
+        }
+    }
+
+    // ── Strømsvigt og genopretning ─────────────────────────────────
+
+    /// <summary>Slukker alle lys og aktiverer englen.</summary>
     public void TriggerPowerFailure()
     {
         if (!_isPowerOn) return;
-
         _isPowerOn = false;
-        Debug.Log("[LightController] Strømsvigt! Lyset slukker.");
 
-        StartFade(lightOffIntensity, fadeOutDuration, () =>
+        Debug.Log("[LightController] Strømsvigt!");
+
+        StartCoroutine(FadeAllLights(0f, fadeOutDuration, () =>
         {
             angel?.Activate();
             powerSwitch?.SetSwitchAvailable(true);
             onLightOff?.Invoke();
-        });
+        }));
     }
 
-    /// <summary>
-    /// Gendanner lyset og deaktiverer statuen permanent.
-    /// Kaldes af AngelPowerSwitch når cooldown er overstået.
-    /// </summary>
+    /// <summary>Tænder alle lys og deaktiverer englen. Kaldes af AngelPowerSwitch.</summary>
     public void RestorePower()
     {
         if (_isPowerOn) return;
-
         _isPowerOn = true;
+
         Debug.Log("[LightController] Strøm genoprettet!");
 
         angel?.Deactivate();
         powerSwitch?.SetSwitchAvailable(false);
 
-        StartFade(lightOnIntensity, fadeInDuration, () =>
+        StartCoroutine(FadeAllLights(1f, fadeInDuration, () =>
         {
             onLightOn?.Invoke();
-        });
+        }));
     }
 
-    // ── Fade-logik ─────────────────────────────────────────────────
+    // ── Fade alle lys ──────────────────────────────────────────────
 
-    void StartFade(float targetIntensity, float duration, System.Action onComplete = null)
+    IEnumerator FadeAllLights(float targetFraction, float duration, System.Action onComplete = null)
     {
-        if (_fadeRoutine != null)
-            StopCoroutine(_fadeRoutine);
-
-        _fadeRoutine = StartCoroutine(FadeLight(targetIntensity, duration, onComplete));
-    }
-
-    IEnumerator FadeLight(float targetIntensity, float duration, System.Action onComplete)
-    {
-        if (roomLight == null) { onComplete?.Invoke(); yield break; }
-
-        float startIntensity = roomLight.intensity;
         float elapsed = 0f;
+
+        // Gem startværdier
+        List<float> startIntensities = new List<float>();
+        for (int i = 0; i < warehouseLights.Count; i++)
+        {
+            Light l = warehouseLights[i];
+            startIntensities.Add(l != null ? l.intensity : 0f);
+        }
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            roomLight.intensity = Mathf.Lerp(startIntensity, targetIntensity, elapsed / duration);
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            for (int i = 0; i < warehouseLights.Count; i++)
+            {
+                if (warehouseLights[i] == null) continue;
+                float target = _originalIntensities[i] * targetFraction;
+                warehouseLights[i].intensity = Mathf.Lerp(startIntensities[i], target, t);
+            }
+
             yield return null;
         }
 
-        roomLight.intensity = targetIntensity;
+        // Sæt præcise slutværdier
+        for (int i = 0; i < warehouseLights.Count; i++)
+        {
+            if (warehouseLights[i] == null) continue;
+            warehouseLights[i].intensity = _originalIntensities[i] * targetFraction;
+        }
+
         onComplete?.Invoke();
     }
+
+    // ── Manuelt sluk til test (tryk F i spillet) ───────────────────
+#if UNITY_EDITOR
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            if (_isPowerOn) TriggerPowerFailure();
+            else RestorePower();
+        }
+    }
+#endif
 }

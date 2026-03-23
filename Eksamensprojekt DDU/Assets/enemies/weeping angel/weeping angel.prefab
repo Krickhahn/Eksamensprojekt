@@ -41,10 +41,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3338007612236830373}
-  - component: {fileID: 1552241356361027699}
   - component: {fileID: 5560247010181004912}
   - component: {fileID: 969622781412727704}
   - component: {fileID: 7073043556875405403}
+  - component: {fileID: 4266762873817015175}
   m_Layer: 0
   m_Name: weeping angel
   m_TagString: Untagged
@@ -61,7 +61,7 @@ Transform:
   m_GameObject: {fileID: 2673216852860947487}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -4.043753, y: 0.00000015013984, z: -13.99474}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.015, y: 0.015, z: 0.015}
   m_ConstrainProportionsScale: 1
   m_Children:
@@ -69,28 +69,6 @@ Transform:
   - {fileID: 7276252179511612153}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!195 &1552241356361027699
-NavMeshAgent:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2673216852860947487}
-  m_Enabled: 1
-  m_AgentTypeID: 0
-  m_Radius: 0.5
-  m_Speed: 3.5
-  m_Acceleration: 8
-  avoidancePriority: 50
-  m_AngularSpeed: 120
-  m_StoppingDistance: 0
-  m_AutoTraverseOffMeshLink: 1
-  m_AutoBraking: 1
-  m_AutoRepath: 1
-  m_Height: 2
-  m_BaseOffset: 0
-  m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 4
 --- !u!65 &5560247010181004912
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -133,6 +111,11 @@ MonoBehaviour:
   losChecksPerSecond: 15
   moveSpeed: 2.5
   rotationSpeed: 120
+  obstacleLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  obstacleDetectionRange: 1.5
+  steeringRays: 8
   attackRange: 1.2
   moveSound: {fileID: 0}
   freezeSound: {fileID: 0}
@@ -152,6 +135,31 @@ MonoBehaviour:
   message: Look
   messageType: 3
   playOnce: 1
+--- !u!143 &4266762873817015175
+CharacterController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2673216852860947487}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Height: 72
+  m_Radius: 14.18
+  m_SlopeLimit: 45
+  m_StepOffset: 0
+  m_SkinWidth: 0.08
+  m_MinMoveDistance: 0.001
+  m_Center: {x: -18, y: 36, z: 0}
 --- !u!1 &6652886801639212130
 GameObject:
   m_ObjectHideFlags: 0

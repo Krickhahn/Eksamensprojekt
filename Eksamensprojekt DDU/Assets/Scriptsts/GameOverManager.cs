@@ -4,28 +4,28 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Håndterer game over når WeepingAngelEnemy fanger spilleren.
+/// Viser game over skærm og genstarter scenen når WeepingAngel fanger spilleren.
 ///
 /// OPSÆTNING:
 ///   1. Opret et tomt GameObject og tilføj dette script.
-///   2. (Valgfrit) Tilslut et Canvas med et sort billede til fadeImage
-///      for en fade-to-black effekt inden scene reload.
-///   3. (Valgfrit) Tilslut en AudioClip til gameOverSound.
-///   4. Justér restartDelay til hvor lang tid der er inden scenen genstartes.
+///   2. Opret et UI Canvas med:
+///      - Et sort Image der dækker hele skærmen (gameOverPanel) — sæt alpha til 0 ved start
+///      - Et Text eller TMP_Text felt med "GAME OVER" (gameOverText) — sæt alpha til 0 ved start
+///   3. Træk disse ind i Inspector-felterne.
+///   4. Juster restartDelay til hvor lang tid game over skærmen vises.
 /// </summary>
 public class GameOverManager : MonoBehaviour
 {
     public static GameOverManager Instance { get; private set; }
 
-    [Header("Indstillinger")]
-    [Tooltip("Sekunder inden scenen genstartes efter game over.")]
+    [Header("UI")]
+    [Tooltip("Panel der fader til sort ved game over. Sæt Image alpha til 0 ved start.")]
+    public CanvasGroup gameOverPanel;
+
+    [Tooltip("Sekunder game over skærmen vises inden scene genstartes.")]
     public float restartDelay = 3f;
 
-    [Header("Visuals (valgfrit)")]
-    [Tooltip("Et UI Image der fader til sort ved game over. Sæt alpha til 0 ved start.")]
-    public Image fadeImage;
-
-    [Tooltip("Hvor hurtigt skærmen fader til sort.")]
+    [Tooltip("Sekunder det tager at fade ind til game over skærmen.")]
     public float fadeDuration = 1f;
 
     [Header("Lyd (valgfrit)")]
@@ -38,11 +38,16 @@ public class GameOverManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        // Sørg for at panelet er usynligt ved start
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.alpha = 0f;
+            gameOverPanel.gameObject.SetActive(false);
+        }
     }
 
-    /// <summary>
-    /// Kaldes af WeepingAngelEnemy når spilleren fanges.
-    /// </summary>
+    /// <summary>Kaldes af WeepingAngelEnemy når spilleren fanges.</summary>
     public void TriggerGameOver()
     {
         if (_triggered) return;
@@ -58,32 +63,26 @@ public class GameOverManager : MonoBehaviour
 
     IEnumerator GameOverSequence()
     {
-        // Lås spillerens input
+        // Lås cursor fri
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        // Fade til sort hvis fadeImage er sat op
-        if (fadeImage != null)
+        // Fade til game over skærm
+        if (gameOverPanel != null)
         {
+            gameOverPanel.gameObject.SetActive(true);
             float elapsed = 0f;
-            Color c = fadeImage.color;
-            c.a = 0f;
-            fadeImage.color = c;
-
             while (elapsed < fadeDuration)
             {
                 elapsed += Time.deltaTime;
-                c.a = Mathf.Clamp01(elapsed / fadeDuration);
-                fadeImage.color = c;
+                gameOverPanel.alpha = Mathf.Clamp01(elapsed / fadeDuration);
                 yield return null;
             }
-        }
-        else
-        {
-            yield return new WaitForSeconds(restartDelay);
+            gameOverPanel.alpha = 1f;
         }
 
-        // Genstart scenen
+        yield return new WaitForSeconds(restartDelay);
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }
