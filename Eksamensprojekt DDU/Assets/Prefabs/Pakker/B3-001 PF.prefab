@@ -189,7 +189,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1234690952641108436}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: B3-001 PF
   m_TagString: Untagged
   m_Icon: {fileID: 0}

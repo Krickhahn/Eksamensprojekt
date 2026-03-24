@@ -373,7 +373,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5252831427891518295}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: PKG-001 PF
   m_TagString: Untagged
   m_Icon: {fileID: 0}

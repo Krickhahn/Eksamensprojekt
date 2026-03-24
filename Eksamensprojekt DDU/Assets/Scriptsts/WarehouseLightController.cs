@@ -4,46 +4,55 @@ using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// Styrer alle lys i varehuset og aktiverer WeepingAngel når lyset slukker.
-/// Lyset slukker tilfældigt baseret på et interval.
+/// Styrer alle lys i varehuset og aktiverer WeepingAngel tilfældigt.
+///
+/// VED SPILSTART trækkes der et tilfældigt aktiveringstidspunkt:
+///   - En chance for at englen slet ikke aktiverer i dette spil
+///   - Ellers trækkes en tid inden for minActivationTime og maxActivationTime
+///
+/// LYSET slukker tilfældigt baseret på et interval uanset om englen aktiverer.
+/// Englen jager KUN når lyset er slukket og stopper når det tændes igen.
 ///
 /// OPSÆTNING:
-///   1. Tilføj dette script til et tomt GameObject i scenen.
-///   2. Træk ALLE lys-objekter i varehuset ind i warehouseLights listen.
-///   3. Træk WeepingAngelEnemy ind i angel feltet.
-///   4. Træk AngelPowerSwitch ind i powerSwitch feltet.
-///   5. Justér minTimeBetweenFailures og maxTimeBetweenFailures.
+///   1. Tilføj dette script til et tomt GameObject.
+///   2. Træk ALLE lys-objekter i varehuset ind i warehouseLights.
+///   3. Træk AngelPowerSwitch ind i powerSwitch.
+///   4. WeepingAngelEnemy findes automatisk i scenen.
 /// </summary>
 public class WarehouseLightController : MonoBehaviour
 {
     public static WarehouseLightController Instance { get; private set; }
 
-    // ── Inspector ──────────────────────────────────────────────────
     [Header("Lys")]
-    [Tooltip("Alle lys-komponenter i varehuset der slukkes ved strømsvigt.")]
+    [Tooltip("Alle lys-komponenter i varehuset.")]
     public List<Light> warehouseLights = new List<Light>();
 
-    [Tooltip("Hvor hurtigt lyset fader ud ved strømsvigt (sekunder).")]
     public float fadeOutDuration = 0.3f;
-
-    [Tooltip("Hvor hurtigt lyset fader ind når strøm genopstår (sekunder).")]
     public float fadeInDuration = 1.5f;
 
-    [Header("Tilfældig strømsvigt")]
-    [Tooltip("Minimum sekunder mellem strømsvigt.")]
+    [Header("Strømsvigt")]
+    [Tooltip("Minimum sekunder mellem strømsvigtsforsøg.")]
     public float minTimeBetweenFailures = 30f;
 
-    [Tooltip("Maksimum sekunder mellem strømsvigt.")]
+    [Tooltip("Maksimum sekunder mellem strømsvigtsforsøg.")]
     public float maxTimeBetweenFailures = 90f;
 
-    [Tooltip("Sekunder inden første mulige strømsvigt efter spilstart.")]
+    [Tooltip("Sekunder inden første mulige strømsvigt.")]
     public float initialDelay = 20f;
 
-    [Header("Referencer")]
-    [Tooltip("Weeping Angel fjenden der aktiveres ved strømsvigt.")]
-    public WeepingAngelEnemy angel;
+    [Header("Engelaktivering")]
+    [Tooltip("Chance for at englen overhovedet aktiverer i dette spil (0-1).\n" +
+             "0 = aldrig aktiv, 1 = altid aktiv.")]
+    [Range(0f, 1f)]
+    public float chanceOfAngel = 0.75f;
 
-    [Tooltip("Stikkontakten spilleren aktiverer for at gendanne strøm.")]
+    [Tooltip("Tidligste tidspunkt englen kan aktivere (sekunder efter spilstart).")]
+    public float minActivationTime = 30f;
+
+    [Tooltip("Seneste tidspunkt englen kan aktivere (sekunder efter spilstart).")]
+    public float maxActivationTime = 180f;
+
+    [Header("Stikkontakt")]
     public AngelPowerSwitch powerSwitch;
 
     [Header("Events (valgfrit)")]
@@ -52,7 +61,10 @@ public class WarehouseLightController : MonoBehaviour
 
     // ── Runtime state ──────────────────────────────────────────────
     private bool _isPowerOn = true;
+    private WeepingAngelEnemy _angel;
     private List<float> _originalIntensities = new List<float>();
+    private float _angelActivationTime = -1f; // -1 = aktiverer ikke dette spil
+    private bool _angelActivated = false;
 
     public bool IsPowerOn => _isPowerOn;
 
@@ -65,25 +77,51 @@ public class WarehouseLightController : MonoBehaviour
 
     void Start()
     {
-        // Gem original lysstyrke for hvert lys
+        // Find englen automatisk
+        _angel = FindAnyObjectByType<WeepingAngelEnemy>();
+        if (_angel == null)
+            Debug.LogWarning("[LightController] Ingen WeepingAngelEnemy fundet i scenen.");
+
+        // Gem original lysstyrke
         foreach (Light l in warehouseLights)
             _originalIntensities.Add(l != null ? l.intensity : 1f);
 
         powerSwitch?.SetSwitchAvailable(false);
 
-        StartCoroutine(RandomFailureLoop());
+        // Træk ved spilstart: aktiverer englen dette spil?
+        if (Random.value <= chanceOfAngel)
+        {
+            _angelActivationTime = Random.Range(minActivationTime, maxActivationTime);
+            Debug.Log($"[LightController] Englen aktiverer om {_angelActivationTime:F0} sekunder.");
+        }
+        else
+        {
+            Debug.Log("[LightController] Englen aktiverer IKKE dette spil.");
+        }
+
+        StartCoroutine(PowerFailureLoop());
+        StartCoroutine(AngelActivationTimer());
     }
 
-    // ── Tilfældig strømsvigt ───────────────────────────────────────
+    // ── Timere ─────────────────────────────────────────────────────
 
-    IEnumerator RandomFailureLoop()
+    IEnumerator AngelActivationTimer()
+    {
+        if (_angelActivationTime < 0f) yield break;
+
+        yield return new WaitForSeconds(_angelActivationTime);
+        _angelActivated = true;
+        Debug.Log("[LightController] Englen er nu klar til at aktivere ved næste strømsvigt.");
+    }
+
+    IEnumerator PowerFailureLoop()
     {
         yield return new WaitForSeconds(initialDelay);
 
         while (true)
         {
-            float waitTime = Random.Range(minTimeBetweenFailures, maxTimeBetweenFailures);
-            yield return new WaitForSeconds(waitTime);
+            float wait = Random.Range(minTimeBetweenFailures, maxTimeBetweenFailures);
+            yield return new WaitForSeconds(wait);
 
             if (_isPowerOn)
                 TriggerPowerFailure();
@@ -92,23 +130,24 @@ public class WarehouseLightController : MonoBehaviour
 
     // ── Strømsvigt og genopretning ─────────────────────────────────
 
-    /// <summary>Slukker alle lys og aktiverer englen.</summary>
     public void TriggerPowerFailure()
     {
         if (!_isPowerOn) return;
         _isPowerOn = false;
 
-        Debug.Log("[LightController] Strømsvigt!");
+        bool activateAngel = _angelActivated && _angel != null;
+        Debug.Log($"[LightController] Strømsvigt! Engel aktiveres: {activateAngel}");
 
         StartCoroutine(FadeAllLights(0f, fadeOutDuration, () =>
         {
-            angel?.Activate();
+            if (activateAngel)
+                _angel.OnLightOff();
+
             powerSwitch?.SetSwitchAvailable(true);
             onLightOff?.Invoke();
         }));
     }
 
-    /// <summary>Tænder alle lys og deaktiverer englen. Kaldes af AngelPowerSwitch.</summary>
     public void RestorePower()
     {
         if (_isPowerOn) return;
@@ -116,7 +155,14 @@ public class WarehouseLightController : MonoBehaviour
 
         Debug.Log("[LightController] Strøm genoprettet!");
 
-        angel?.Deactivate();
+        // Stop englen hvis den jager
+        if (_angel != null &&
+            (_angel.CurrentState == WeepingAngelEnemy.AngelState.Hunting ||
+             _angel.CurrentState == WeepingAngelEnemy.AngelState.Frozen))
+        {
+            _angel.OnLightOn();
+        }
+
         powerSwitch?.SetSwitchAvailable(false);
 
         StartCoroutine(FadeAllLights(1f, fadeInDuration, () =>
@@ -130,31 +176,23 @@ public class WarehouseLightController : MonoBehaviour
     IEnumerator FadeAllLights(float targetFraction, float duration, System.Action onComplete = null)
     {
         float elapsed = 0f;
-
-        // Gem startværdier
         List<float> startIntensities = new List<float>();
         for (int i = 0; i < warehouseLights.Count; i++)
-        {
-            Light l = warehouseLights[i];
-            startIntensities.Add(l != null ? l.intensity : 0f);
-        }
+            startIntensities.Add(warehouseLights[i] != null ? warehouseLights[i].intensity : 0f);
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
-
             for (int i = 0; i < warehouseLights.Count; i++)
             {
                 if (warehouseLights[i] == null) continue;
-                float target = _originalIntensities[i] * targetFraction;
-                warehouseLights[i].intensity = Mathf.Lerp(startIntensities[i], target, t);
+                warehouseLights[i].intensity = Mathf.Lerp(
+                    startIntensities[i], _originalIntensities[i] * targetFraction, t);
             }
-
             yield return null;
         }
 
-        // Sæt præcise slutværdier
         for (int i = 0; i < warehouseLights.Count; i++)
         {
             if (warehouseLights[i] == null) continue;
@@ -164,11 +202,11 @@ public class WarehouseLightController : MonoBehaviour
         onComplete?.Invoke();
     }
 
-    // ── Manuelt sluk til test (tryk F i spillet) ───────────────────
+    // ── Test-tast (kun i editor) ───────────────────────────────────
 #if UNITY_EDITOR
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.F))
+        if (Input.GetKeyDown(KeyCode.Q))
         {
             if (_isPowerOn) TriggerPowerFailure();
             else RestorePower();

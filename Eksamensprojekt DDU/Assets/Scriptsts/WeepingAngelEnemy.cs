@@ -1,61 +1,60 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 
 /// <summary>
-/// Weeping Angel-fjende der bevæger sig mod spilleren når lyset er slukket
-/// og spilleren ikke kigger på den. Undgår vægge via raycast steering.
+/// Weeping Angel-fjende der jager spilleren når lyset er slukket
+/// og spilleren ikke kigger på den.
+///
+/// TILSTANDE:
+///   Idle     — lyset er tændt, englen står stille på sin plads
+///   Hunting  — lyset er slukket og spilleren kigger ikke på den
+///   Frozen   — lyset er slukket men spilleren kigger på den
+///
+/// Petrified er fjernet — englen kan altid genaktiveres når lyset slukker igen.
 ///
 /// OPSÆTNING:
-///   1. Tilføj dette script til din statue-prefab.
+///   1. Placer englen i scenen på dens startposition.
 ///   2. Sæt tag "Player" på spillerens GameObject.
-///   3. Sæt obstacleLayers til de layers der indeholder vægge (typisk "Default").
-///   4. WarehouseLightController kalder Activate/Deactivate automatisk.
-///
-/// KRÆVER INGEN NAVMESH.
+///   3. Sæt obstacleLayers til de layers dine vægge er på.
+///   4. WarehouseLightController kalder OnLightOff/OnLightOn automatisk.
 /// </summary>
 public class WeepingAngelEnemy : MonoBehaviour
 {
-    public enum AngelState { Idle, Hunting, Frozen, Petrified }
+    public enum AngelState { Idle, Hunting, Frozen }
 
     // ── Inspector ──────────────────────────────────────────────────
     [Header("Referencer")]
-    [Tooltip("Spillerens Transform. Finder automatisk via tag 'Player' hvis tomt.")]
+    [Tooltip("Finder automatisk via tag 'Player' hvis tomt.")]
     public Transform playerTransform;
 
-    [Tooltip("Spillerens kamera. Finder automatisk Camera.main hvis tomt.")]
+    [Tooltip("Finder automatisk Camera.main hvis tomt.")]
     public Camera playerCamera;
 
     [Header("Line-of-Sight")]
-    [Tooltip("Maks vinkel fra kameraets forwardvektor før statuen regnes som set (grader).")]
     [Range(1f, 60f)]
     public float detectionAngle = 25f;
 
-    [Tooltip("Layers der blokerer synslinjen — typisk Default.")]
+    [Tooltip("Layers der blokerer synslinjen.")]
     public LayerMask occlusionMask = ~0;
 
-    [Tooltip("Hvor mange gange per sekund line-of-sight tjekkes.")]
     [Range(5, 30)]
     public int losChecksPerSecond = 15;
 
     [Header("Bevægelse")]
-    [Tooltip("Bevægelseshastighed mod spilleren (meter/sekund).")]
     public float moveSpeed = 2f;
-
-    [Tooltip("Rotationshastighed (grader/sekund).")]
     public float rotationSpeed = 180f;
 
     [Header("Obstacle Avoidance")]
-    [Tooltip("Layers der regnes som forhindringer englen skal undgå (vægge, kasser osv.).")]
+    [Tooltip("Layers der regnes som forhindringer (vægge osv.).")]
     public LayerMask obstacleLayers;
 
-    [Tooltip("Afstand hvorfra englen opdager og begynder at styre udenom forhindringer.")]
+    [Tooltip("Afstand hvorfra englen opdager forhindringer foran sig.")]
     public float obstacleDetectionRange = 1.5f;
 
-    [Tooltip("Antal retninger der testes for at finde vej udenom forhindringer. Højere = bedre men dyrere.")]
-    [Range(4, 16)]
-    public int steeringRays = 8;
+    [Tooltip("Bredde af englen brugt til side-raycasts — sæt til ca. halvdelen af bredden.")]
+    public float angelWidth = 0.4f;
 
     [Header("Angreb")]
-    [Tooltip("Afstand hvorfra englen trigger game over.")]
     public float attackRange = 1f;
 
     [Header("Lyd (valgfrit)")]
@@ -68,6 +67,13 @@ public class WeepingAngelEnemy : MonoBehaviour
     private float _losTimer;
     private float _losInterval;
     private bool _playerLooking;
+    private Vector3 _startPosition;
+    private Quaternion _startRotation;
+
+    // Steering state
+    private float _steerAngle = 0f;        // nuværende styrevinkel
+    private float _steerTimer = 0f;        // tid siden vi sidst prøvede en ny retning
+    private const float SteerInterval = 0.3f;
 
     public AngelState CurrentState => _state;
 
@@ -77,10 +83,8 @@ public class WeepingAngelEnemy : MonoBehaviour
         if (playerTransform == null)
         {
             GameObject player = GameObject.FindWithTag("Player");
-            if (player != null)
-                playerTransform = player.transform;
-            else
-                Debug.LogWarning("[WeepingAngel] Ingen spiller fundet — sæt tag 'Player' på spillerens GameObject.");
+            if (player != null) playerTransform = player.transform;
+            else Debug.LogWarning("[WeepingAngel] Ingen spiller fundet — sæt tag 'Player'.");
         }
 
         if (playerCamera == null)
@@ -90,14 +94,13 @@ public class WeepingAngelEnemy : MonoBehaviour
             audioSource = GetComponent<AudioSource>();
 
         _losInterval = 1f / losChecksPerSecond;
-
-        EnemySpawnManager.Instance?.RegisterEnemy(gameObject);
+        _startPosition = transform.position;
+        _startRotation = transform.rotation;
     }
 
     void Update()
     {
-        if (_state == AngelState.Idle || _state == AngelState.Petrified)
-            return;
+        if (_state == AngelState.Idle) return;
 
         // ── Line-of-sight tjek ─────────────────────────────────────
         _losTimer += Time.deltaTime;
@@ -121,28 +124,35 @@ public class WeepingAngelEnemy : MonoBehaviour
         }
     }
 
-    // ── Aktivering ─────────────────────────────────────────────────
+    // ── Lys-events ─────────────────────────────────────────────────
 
-    /// <summary>Aktiverer englen. Kaldes af WarehouseLightController når lyset slukkes.</summary>
-    public void Activate()
+    /// <summary>Kaldes af WarehouseLightController når lyset slukkes.</summary>
+    public void OnLightOff()
     {
-        if (_state == AngelState.Petrified) return;
-        Debug.Log("[WeepingAngel] Aktiveret — lyset er slukket.");
+        Debug.Log("[WeepingAngel] Lyset er slukket — begynder at jage.");
         EnterHunting();
     }
 
-    /// <summary>Deaktiverer englen permanent. Kaldes når lyset tændes igen.</summary>
-    public void Deactivate()
+    /// <summary>Kaldes af WarehouseLightController når lyset tændes.</summary>
+    public void OnLightOn()
     {
-        Debug.Log("[WeepingAngel] Permanent fryst — lyset er tændt.");
-        EnterPetrified();
+        Debug.Log("[WeepingAngel] Lyset er tændt — stopper.");
+        EnterIdle();
     }
 
     // ── Tilstandsskift ─────────────────────────────────────────────
 
+    void EnterIdle()
+    {
+        _state = AngelState.Idle;
+        // Vent til spilleren kigger væk, teleportér så tilbage til start
+        StartCoroutine(ReturnToStartWhenUnwatched());
+    }
+
     void EnterHunting()
     {
         _state = AngelState.Hunting;
+        _steerAngle = 0f;
         PlaySound(moveSound);
     }
 
@@ -153,22 +163,35 @@ public class WeepingAngelEnemy : MonoBehaviour
             PlaySound(freezeSound);
     }
 
-    void EnterPetrified()
+    IEnumerator ReturnToStartWhenUnwatched()
     {
-        _state = AngelState.Petrified;
-        EnemySpawnManager.Instance?.UnregisterEnemy(gameObject);
+        // Vent til spilleren ikke kigger i 1 sekund
+        float unwatchedTime = 0f;
+        while (unwatchedTime < 1f)
+        {
+            if (!CheckLineOfSight())
+                unwatchedTime += Time.deltaTime;
+            else
+                unwatchedTime = 0f;
+            yield return null;
+        }
+
+        // Teleportér tilbage usynligt
+        transform.position = _startPosition;
+        transform.rotation = _startRotation;
+        Debug.Log("[WeepingAngel] Tilbage på startposition.");
     }
 
-    // ── Bevægelse ──────────────────────────────────────────────────
+    // ── Bevægelse og pathfinding ───────────────────────────────────
 
     void MoveTowardsPlayer()
     {
-        Vector3 desiredDir = playerTransform.position - transform.position;
-        desiredDir.y = 0f;
-        if (desiredDir.sqrMagnitude < 0.001f) return;
-        desiredDir.Normalize();
+        Vector3 toPlayer = playerTransform.position - transform.position;
+        toPlayer.y = 0f;
+        if (toPlayer.sqrMagnitude < 0.001f) return;
 
-        Vector3 moveDir = FindBestDirection(desiredDir);
+        Vector3 desiredDir = toPlayer.normalized;
+        Vector3 moveDir = CalculateMoveDirection(desiredDir);
 
         // Roter mod bevægelsesretningen
         if (moveDir.sqrMagnitude > 0.001f)
@@ -182,43 +205,52 @@ public class WeepingAngelEnemy : MonoBehaviour
     }
 
     /// <summary>
-    /// Finder den bedste bevægelsesretning ved at kaste rays i en vifte.
-    /// Prioriterer retninger tættest på spilleren der ikke rammer en forhindring.
+    /// Beregner bedste bevægelsesretning med wall-following logik.
+    /// Bruger tre raycasts (frem, venstre-frem, højre-frem) og
+    /// husker hvilken side den styre udenom for at undgå at gå i cirkler.
     /// </summary>
-    Vector3 FindBestDirection(Vector3 desiredDir)
+    Vector3 CalculateMoveDirection(Vector3 desiredDir)
     {
-        // Prøv direkte retning mod spilleren først
-        if (!IsBlocked(desiredDir))
-            return desiredDir;
+        _steerTimer += Time.deltaTime;
 
-        // Prøv vinklede alternativer
-        float bestScore = float.MinValue;
-        Vector3 bestDir = desiredDir;
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
 
-        for (int i = 0; i < steeringRays; i++)
+        // Tjek om den direkte vej er fri
+        bool frontBlocked = Physics.Raycast(origin, desiredDir, obstacleDetectionRange, obstacleLayers);
+
+        // Tjek siderne med lidt bredde (simulerer engelens krop)
+        Vector3 leftOrig = origin - transform.right * angelWidth;
+        Vector3 rightOrig = origin + transform.right * angelWidth;
+        bool leftBlocked = Physics.Raycast(leftOrig, desiredDir, obstacleDetectionRange, obstacleLayers);
+        bool rightBlocked = Physics.Raycast(rightOrig, desiredDir, obstacleDetectionRange, obstacleLayers);
+
+        if (!frontBlocked && !leftBlocked && !rightBlocked)
         {
-            // Fordel rays jævnt rundt om englen
-            float angle = (360f / steeringRays) * i;
-            Vector3 candidate = Quaternion.Euler(0f, angle, 0f) * desiredDir;
+            // Vej er fri — nulstil styrevinkel gradvist
+            _steerAngle = Mathf.MoveTowards(_steerAngle, 0f, 90f * Time.deltaTime);
+            return Quaternion.Euler(0f, _steerAngle, 0f) * desiredDir;
+        }
 
-            if (IsBlocked(candidate)) continue;
+        // Forhindring forude — find en ny styrevinkel hvert SteerInterval sekund
+        if (_steerTimer >= SteerInterval)
+        {
+            _steerTimer = 0f;
 
-            // Vælg retningen tættest på spilleren
-            float score = Vector3.Dot(candidate, desiredDir);
-            if (score > bestScore)
+            // Prøv vinkler i stigende størrelse, skiftevis venstre og højre
+            float[] angles = { 30f, -30f, 60f, -60f, 90f, -90f, 120f, -120f, 150f, -150f, 180f };
+            foreach (float angle in angles)
             {
-                bestScore = score;
-                bestDir = candidate;
+                Vector3 candidate = Quaternion.Euler(0f, angle, 0f) * desiredDir;
+                bool blocked = Physics.Raycast(origin, candidate, obstacleDetectionRange, obstacleLayers);
+                if (!blocked)
+                {
+                    _steerAngle = angle;
+                    break;
+                }
             }
         }
 
-        return bestDir;
-    }
-
-    bool IsBlocked(Vector3 dir)
-    {
-        Vector3 origin = transform.position + Vector3.up * 0.5f;
-        return Physics.Raycast(origin, dir, obstacleDetectionRange, obstacleLayers);
+        return Quaternion.Euler(0f, _steerAngle, 0f) * desiredDir;
     }
 
     // ── Line-of-Sight ──────────────────────────────────────────────
@@ -227,13 +259,10 @@ public class WeepingAngelEnemy : MonoBehaviour
     {
         if (playerCamera == null || playerTransform == null) return false;
 
-        // Trin 1 — er englen inden for kameraets synsfelt?
         Vector3 dirToAngel = (transform.position - playerCamera.transform.position).normalized;
         float angle = Vector3.Angle(playerCamera.transform.forward, dirToAngel);
-        if (angle > detectionAngle)
-            return false;
+        if (angle > detectionAngle) return false;
 
-        // Trin 2 — er der en væg imellem?
         Vector3 origin = playerCamera.transform.position;
         Vector3 target = transform.position + Vector3.up * 0.5f;
         float dist = Vector3.Distance(origin, target);
@@ -255,7 +284,7 @@ public class WeepingAngelEnemy : MonoBehaviour
         if (playerTransform == null) return;
         if (Vector3.Distance(transform.position, playerTransform.position) <= attackRange)
         {
-            _state = AngelState.Petrified;
+            EnterIdle();
             GameOverManager.Instance?.TriggerGameOver();
         }
     }
