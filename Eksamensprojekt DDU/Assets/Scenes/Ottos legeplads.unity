@@ -1349,28 +1349,6 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!195 &545588601
-NavMeshAgent:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 545588595}
-  m_Enabled: 1
-  m_AgentTypeID: 0
-  m_Radius: 0.5
-  m_Speed: 3.5
-  m_Acceleration: 8
-  avoidancePriority: 50
-  m_AngularSpeed: 120
-  m_StoppingDistance: 0
-  m_AutoTraverseOffMeshLink: 1
-  m_AutoBraking: 1
-  m_AutoRepath: 1
-  m_Height: 2
-  m_BaseOffset: 0
-  m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 4
 --- !u!1 &578069887
 GameObject:
   m_ObjectHideFlags: 0
@@ -3671,11 +3649,15 @@ PrefabInstance:
     - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: agent
       value: 
-      objectReference: {fileID: 545588601}
+      objectReference: {fileID: 0}
     - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: moveSound
       value: 
       objectReference: {fileID: 8300000, guid: 1c6eb250e4c919f409b988c6b0e78a8c, type: 3}
+    - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
+      propertyPath: angelWidth
+      value: 0.2
+      objectReference: {fileID: 0}
     - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: attackRange
       value: 1.5
@@ -3697,12 +3679,24 @@ PrefabInstance:
       value: 1000
       objectReference: {fileID: 0}
     - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
+      propertyPath: detectionAngle
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: playerTransform
       value: 
       objectReference: {fileID: 539615641}
     - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
+      propertyPath: occlusionMask.m_Bits
+      value: 223
+      objectReference: {fileID: 0}
+    - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: obstacleLayers.m_Bits
       value: 119
+      objectReference: {fileID: 0}
+    - target: {fileID: 5991107665464844982, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
+      propertyPath: obstacleDetectionRange
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 6041194106626518706, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       propertyPath: m_Name
@@ -3715,9 +3709,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6041194106626518706, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 545588600}
-    - targetCorrespondingSourceObject: {fileID: 6041194106626518706, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 545588601}
   m_SourcePrefab: {fileID: 100100000, guid: 390e2feb4c6438942ba0cf00d4edb76f, type: 3}
 --- !u!33 &100472720190935583
 MeshFilter:
