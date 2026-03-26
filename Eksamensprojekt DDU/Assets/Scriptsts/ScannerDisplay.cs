@@ -98,7 +98,7 @@ public class ScannerDisplay : MonoBehaviour
     {
         // Nu afsløres destinationen
         SetLoop(
-            $"OK >> {order.deliveryZone?.zoneName ?? "?"}",
+            $"OK: {order.itemID} >> {order.deliveryZone?.zoneName ?? "?"}",
             colorSuccess
         );
     }
@@ -131,32 +131,32 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowGoToOffice()
     {
-        SetLoop("GA TIL KONTORET", colorNormal);
+        SetLoop("GO TO OFFICE", colorNormal);
     }
 
     public void ShowAllComplete()
     {
-        SetLoop("ALLE FERDIGE", colorSuccess);
+        SetLoop("ALL DONE", colorSuccess);
     }
 
     public void ShowWrongItem(string scannedID, string expectedID)
     {
-        PlayOnce($"FEJL: {scannedID} != {expectedID}", colorError);
+        PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
     }
 
     public void ShowWrongZone(DeliveryZone expectedZone)
     {
-        PlayOnce($"FEJL ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
+        PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
     }
 
     public void ShowPackageNotInZone(DeliveryZone zone)
     {
-        PlayOnce($"PLACER PAKKE: {zone?.zoneName ?? "?"}", colorWarning);
+        PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
     }
 
     public void ShowWrongPackageInZone(string expectedID)
     {
-        PlayOnce($"FORKERT PAKKE I ZONE: {expectedID}", colorError);
+        PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
     }
 
     public void ShowCustomMessage(string message, Color color)
@@ -166,7 +166,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowScanPackageFirst()
     {
-        PlayOnce("SCAN PAKKE FORST", colorWarning);
+        PlayOnce("SCAN PACKAGE FIRST", colorWarning);
     }
 
     // ── Scanning ──────────────────────────────────────────────────
