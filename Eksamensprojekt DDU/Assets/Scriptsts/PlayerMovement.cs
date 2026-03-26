@@ -25,7 +25,7 @@ public class PlayerMovement : MonoBehaviour
     public float acceleration = 15f;
 
     [Tooltip("How quickly the player slows down.")]
-    public float deceleration = 20f;
+    public float deceleration = 60f;
 
     // ─────────────────────────────────────────────
     //  GRAVITY
@@ -60,14 +60,9 @@ public class PlayerMovement : MonoBehaviour
     //  WEIGHT / CARRY
     // ─────────────────────────────────────────────
     [Header("Carry Weight")]
-    [Tooltip("Den vægt (kg) hvor spilleren er fuldstændig bremset (hastighed = 0).\n" +
-             "Bruges som reference i PickupObject. Prøv en værdi omkring 20.")]
+    [Tooltip("Den vægt (kg) hvor spilleren er fuldstændig bremset.")]
     public float maxCarryWeight = 20f;
 
-    /// <summary>
-    /// Sættes automatisk af PickupObject når man samler noget op (0–1).
-    /// 1 = fuld hastighed, 0 = ingen hastighed.
-    /// </summary>
     [HideInInspector]
     public float weightMultiplier = 1f;
 
@@ -197,12 +192,18 @@ public class PlayerMovement : MonoBehaviour
         float centerOffset = (newHeight - oldHeight) / 2f;
         _cc.center += new Vector3(0f, centerOffset, 0f);
 
-        // Move the camera with the height change so it doesn't clip into the ceiling
+        // Flyt kameraet med controller-højden så det følger med ned ved crouch
         if (cameraTransform != null)
         {
-            Vector3 camPos = _cameraLocalOrigin;
-            camPos.y += (_cc.height - standingHeight);          // offset relative to standing
-            _cameraLocalOrigin = Vector3.Lerp(_cameraLocalOrigin, camPos, Time.deltaTime * crouchTransitionSpeed);
+            // Kameraets mål-Y er proportionalt med controller-højden
+            float standingCamY = standingHeight - 0.15f;   // øjenhøjde stående
+            float crouchCamY = crouchHeight - 0.15f;    // øjenhøjde crouching
+            float t = 1f - (_cc.height - crouchHeight) / (standingHeight - crouchHeight);
+            float targetCamY = Mathf.Lerp(standingCamY, crouchCamY, t);
+
+            Vector3 origin = _cameraLocalOrigin;
+            origin.y = targetCamY;
+            _cameraLocalOrigin = Vector3.Lerp(_cameraLocalOrigin, origin, Time.deltaTime * crouchTransitionSpeed);
         }
     }
 

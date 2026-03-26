@@ -39,21 +39,21 @@ public class OrderStation : MonoBehaviour
 
         if (manager == null || display == null) return;
 
-        // Tjek om der er en aktiv ordre der ikke er afleveret endnu
+        // Stadig aktiv ordre der ikke er afleveret
         if (manager.CurrentOrder != null)
         {
             display.ShowCustomMessage(notReadyMessage, display.colorWarning);
             return;
         }
 
-        // Tjek om der er flere ordrer at give
-        if (!manager.HasMoreOrders())
+        // Ingen ordrer at give
+        if (!manager.HasMoreOrders() && !manager.WaitingForOffice)
         {
             display.ShowCustomMessage(allDoneMessage, display.colorNormal);
             return;
         }
 
-        // Giv næste ordre
+        // Giv næste ordre — afbryder evt. point-tekst der stadig ruller
         display.ShowCustomMessage(readyMessage, display.colorSuccess);
         manager.GiveNextOrder();
     }
