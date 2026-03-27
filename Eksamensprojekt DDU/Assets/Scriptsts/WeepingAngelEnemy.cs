@@ -14,9 +14,20 @@ public class WeepingAngelEnemy : MonoBehaviour
     public Camera playerCamera;
 
     [Header("Line-of-Sight")]
-    public float detectionAngle = 25f;
+    [Tooltip("Vinkel i grader fra kameraets forward-vektor der tæller som 'set'")]
+    public float freezeAngle = 25f;
+    [Tooltip("Skal være større end freezeAngle – hysteresis forhindrer flimmer ved grænsen")]
+    public float unfreezeAngle = 32f;
+    [Tooltip("Antal LOS-checks per sekund")]
+    public int losChecksPerSecond = 20;
+    [Tooltip("Lag der kan blokere sigtelinjen")]
     public LayerMask occlusionMask = ~0;
-    public int losChecksPerSecond = 15;
+    [Tooltip("Antal ekstra rays spredt over angel-kroppen (0 = kun én center-ray)")]
+    [Range(0, 6)]
+    public int multiRayCount = 3;
+    [Tooltip("Margin inden for viewport-kanten der stadig tæller som 'på skærm' (0–0.1)")]
+    [Range(0f, 0.1f)]
+    public float viewportMargin = 0.02f;
 
     [Header("Bevægelse (NavMesh)")]
     public float moveSpeed = 3.5f;
@@ -32,13 +43,15 @@ public class WeepingAngelEnemy : MonoBehaviour
     public AudioClip moveSound;
     public AudioClip freezeSound;
     public AudioClip killSound;
-    public AudioSource audioSource;
+    public AudioSource movementSource;   // loop-kilde til bevægelyd
+    public AudioSource sfxSource;        // one-shot kilde til freeze/kill
 
-    // Runtime
+    // ── Runtime ──────────────────────────────────────────────
     private AngelState _state = AngelState.Idle;
     private float _losTimer;
     private float _losInterval;
     private bool _playerLooking;
+    private bool _playingFreezeSound;
 
     private Vector3 _startPosition;
     private Quaternion _startRotation;
@@ -48,20 +61,15 @@ public class WeepingAngelEnemy : MonoBehaviour
 
     public AngelState CurrentState => _state;
 
-    private const float MoveSoundThreshold = 0.05f;
-    private bool _playingFreezeSound = false;
+    // Offset-punkter på angel-kroppen der raycastes mod (lokale Y-offsets)
+    private static readonly float[] BodyOffsets = { 0f, 0.8f, 1.4f, 1.8f, 0.4f, 1.1f, 0.2f };
 
-    public AudioSource movementSource; // til moveSound (loop)
-    public AudioSource sfxSource;      // til freeze og kill one-shots
-
-    public float freezeAngle = 25f;
-    public float unfreezeAngle = 30f;  // lidt større end freezeAngle
-
-
-
+    // ── Unity Lifecycle ──────────────────────────────────────
     void Start()
     {
         _agent = GetComponent<NavMeshAgent>();
+        _rb = GetComponent<Rigidbody>();
+
         if (playerTransform == null)
         {
             GameObject p = GameObject.FindWithTag("Player");
@@ -71,21 +79,16 @@ public class WeepingAngelEnemy : MonoBehaviour
         if (playerCamera == null)
             playerCamera = Camera.main;
 
-        if (audioSource == null)
-            audioSource = GetComponent<AudioSource>();
-
-        _rb = GetComponent<Rigidbody>();
         _rb.isKinematic = true;
         _rb.useGravity = false;
         _rb.freezeRotation = true;
 
-        _agent = GetComponent<NavMeshAgent>();
         _agent.speed = moveSpeed;
         _agent.angularSpeed = rotationSpeed;
         _agent.updateRotation = true;
         _agent.updatePosition = true;
 
-        _losInterval = 1f / losChecksPerSecond;
+        _losInterval = 1f / Mathf.Max(1, losChecksPerSecond);
 
         _startPosition = transform.position;
         _startRotation = transform.rotation;
@@ -95,7 +98,7 @@ public class WeepingAngelEnemy : MonoBehaviour
     {
         if (_state == AngelState.Idle) return;
 
-        // Line-of-sight timing
+        // ── LOS-check med fast interval ───────────────────────
         _losTimer += Time.deltaTime;
         if (_losTimer >= _losInterval)
         {
@@ -103,48 +106,30 @@ public class WeepingAngelEnemy : MonoBehaviour
             bool wasLooking = _playerLooking;
             _playerLooking = CheckLineOfSight();
 
-            if (_playerLooking)
-            {
-                if (_state == AngelState.Hunting)
-                    EnterFrozen(wasLooking);
-            }
-            else
-            {
-                if (_state == AngelState.Frozen)
-                    EnterHunting();
-            }
-
+            if (_playerLooking && _state == AngelState.Hunting)
+                EnterFrozen(wasLooking);
+            else if (!_playerLooking && _state == AngelState.Frozen)
+                EnterHunting();
         }
 
+        // ── Jagt-logik ────────────────────────────────────────
         if (_state == AngelState.Hunting && playerTransform != null)
         {
             _agent.SetDestination(playerTransform.position);
             CheckAttackRange();
-        }
-        if (_state == AngelState.Hunting)
-        {
             UpdateMoveSound();
         }
         else
         {
-            // State skift håndterer dette, men vi failsafer:
-            if (audioSource != null && audioSource.isPlaying && audioSource.clip == moveSound)
-                audioSource.Stop();
+            StopMoveSound();
         }
     }
 
-    // ── Lys events ──────────────────────────────
-    public void OnLightOff()
-    {
-        EnterHunting();
-    }
+    // ── Lys-events ───────────────────────────────────────────
+    public void OnLightOff() => EnterHunting();
+    public void OnLightOn() => EnterIdle();
 
-    public void OnLightOn()
-    {
-        EnterIdle();
-    }
-
-    // ── Tilstandsskift ───────────────────────────
+    // ── Tilstandsskift ────────────────────────────────────────
     void EnterIdle()
     {
         _state = AngelState.Idle;
@@ -165,117 +150,92 @@ public class WeepingAngelEnemy : MonoBehaviour
     void EnterFrozen(bool wasAlreadyLooking)
     {
         _state = AngelState.Frozen;
-
-        if (_agent != null)
-            _agent.isStopped = true;
-
-        StopMoveSound();
-
-        if (!wasAlreadyLooking)
-        {
-            _playingFreezeSound = true;
-            audioSource.PlayOneShot(freezeSound);
-            StartCoroutine(ResetFreezeSoundFlag());
-        }
         _agent.isStopped = true;
         _agent.ResetPath();
         _agent.velocity = Vector3.zero;
+        StopMoveSound();
 
+        if (!wasAlreadyLooking && freezeSound != null && sfxSource != null)
+        {
+            _playingFreezeSound = true;
+            sfxSource.PlayOneShot(freezeSound);
+            StartCoroutine(ResetFreezeSoundFlag(freezeSound.length));
+        }
     }
-    IEnumerator ResetFreezeSoundFlag()
+
+    IEnumerator ResetFreezeSoundFlag(float delay)
     {
-        // Vent til freeze-lyden er færdig
-        yield return new WaitForSeconds(freezeSound.length);
+        yield return new WaitForSeconds(delay);
         _playingFreezeSound = false;
     }
 
     IEnumerator ReturnToStartWhenUnwatched()
     {
         float unwatchedTime = 0f;
-
-        // Vent 1 sekund hvor spilleren ikke kigger
         while (unwatchedTime < 1f)
         {
-            if (!CheckLineOfSight())
-                unwatchedTime += Time.deltaTime;
-            else
-                unwatchedTime = 0f;
-
+            unwatchedTime = CheckLineOfSight() ? 0f : unwatchedTime + Time.deltaTime;
             yield return null;
         }
 
-        // Stop bevægelse hvis agenten var på vej
         if (_agent != null)
             _agent.isStopped = true;
 
-        // TELEPORT!
         transform.position = _startPosition;
         transform.rotation = _startRotation;
     }
 
-    // ── Line of Sight ───────────────────────────
+    // ── Line-of-Sight ─────────────────────────────────────────
     bool CheckLineOfSight()
     {
-        if (playerCamera == null) return false;
+        if (playerCamera == null || playerTransform == null) return false;
 
-        Vector3 eyePos = playerCamera.transform.position;
-        Vector3 target = transform.position + Vector3.up * 1.6f; // ram fjendens “head height”
-        Vector3 dir = (target - eyePos).normalized;
+        int totalRays = 1 + Mathf.Clamp(multiRayCount, 0, BodyOffsets.Length - 1);
 
-        // --- Viewport check + debug ---
-        Vector3 vp = playerCamera.WorldToViewportPoint(target);
+        for (int i = 0; i < totalRays; i++)
+        {
+            Vector3 target = transform.position + Vector3.up * BodyOffsets[i];
+            if (IsSinglePointVisible(target))
+                return true;
+        }
 
-        bool onScreen = vp.z > 0 &&
-                        vp.x >= 0f && vp.x <= 1f &&
-                        vp.y >= 0f && vp.y <= 1f;
+        return false;
+    }
 
-        // Debug viewport indicator
-#if UNITY_EDITOR
-        if (!onScreen)
-            Debug.DrawLine(eyePos, target, Color.red);
-#endif
+    bool IsSinglePointVisible(Vector3 worldTarget)
+    {
+        Transform cam = playerCamera.transform;
+        Vector3 eyePos = cam.position;
 
+        // 1. Viewport-check
+        Vector3 vp = playerCamera.WorldToViewportPoint(worldTarget);
+        bool onScreen = vp.z > 0f
+                     && vp.x >= -viewportMargin && vp.x <= 1f + viewportMargin
+                     && vp.y >= -viewportMargin && vp.y <= 1f + viewportMargin;
         if (!onScreen) return false;
 
-        // --- Angle check ---
-        float angle = Vector3.Angle(playerCamera.transform.forward, dir);
+        // 2. Vinkelcheck (hysteresis)
+        Vector3 dirToTarget = (worldTarget - eyePos).normalized;
+        float angle = Vector3.Angle(cam.forward, dirToTarget);
+        float threshold = (_state == AngelState.Frozen) ? unfreezeAngle : freezeAngle;
+        if (angle > threshold) return false;
 
-#if UNITY_EDITOR
-        Color angleColor = angle <= detectionAngle ? Color.green : Color.red;
-        Debug.DrawRay(eyePos, dir * 8f, angleColor);
-#endif
-
-        if (_state == AngelState.Frozen)
+        // 3. Occlusion raycast
+        float distance = Vector3.Distance(eyePos, worldTarget);
+        if (Physics.Raycast(eyePos, dirToTarget, out RaycastHit hit, distance + 0.1f, occlusionMask))
         {
-            // Brug unfreeze-angle, så englen kun unfreezes hvis du kigger VÆK tydeligt
-            if (angle > unfreezeAngle)
-                return false;
-        }
-        else
-        {
-            // Brug freeze-angle til at fange at du kigger
-            if (angle > freezeAngle)
-                return false;
-        }
-
-        // --- Raycast occlusion check ---
-        if (Physics.Raycast(eyePos, dir, out RaycastHit hit, 30f, occlusionMask))
-        {
-#if UNITY_EDITOR
-            Debug.DrawLine(eyePos, hit.point, Color.yellow);
-#endif
-
-            if (hit.transform != transform && !hit.transform.IsChildOf(transform))
-                return false;
+            bool hitAngel = hit.transform == transform
+                         || hit.transform.IsChildOf(transform);
+            if (!hitAngel) return false;
         }
 
 #if UNITY_EDITOR
-        Debug.DrawLine(eyePos, target, Color.green);
+        Debug.DrawLine(eyePos, worldTarget, Color.green);
 #endif
         return true;
     }
 
-    // ── Attack ─────────────────────────────────
+    // ── Attack ───────────────────────────────────────────────
     void CheckAttackRange()
     {
         if (playerTransform == null) return;
@@ -288,54 +248,45 @@ public class WeepingAngelEnemy : MonoBehaviour
         }
     }
 
-    // ── Lyde ───────────────────────────────────
-
+    // ── Lyd ──────────────────────────────────────────────────
     void StartMoveSound()
     {
         if (movementSource == null || moveSound == null) return;
-
-        if (movementSource.clip != moveSound)
-            movementSource.clip = moveSound;
-
-        if (!movementSource.isPlaying)
-            movementSource.Play();
+        if (movementSource.clip != moveSound) movementSource.clip = moveSound;
+        movementSource.loop = true;
+        if (!movementSource.isPlaying) movementSource.Play();
     }
 
     void StopMoveSound()
     {
-        if (movementSource == null) return;
-        movementSource.Stop(); // påvirker IKKE sfxSource
-    }
-
-    void PlayOneShot(AudioClip clip)
-    {
-        if (sfxSource == null || clip == null) return;
-        sfxSource.PlayOneShot(clip);
+        if (movementSource != null && movementSource.isPlaying)
+            movementSource.Stop();
     }
 
     void UpdateMoveSound()
     {
-        if (_playingFreezeSound) return; // <-- VIGTIGT!
-
-        if (_agent == null || audioSource == null || moveSound == null)
-            return;
-
-        float speed = _agent.velocity.magnitude;
-
-        if (speed > MoveSoundThreshold)
-        {
-            if (!audioSource.isPlaying || audioSource.clip != moveSound)
-            {
-                audioSource.clip = moveSound;
-                audioSource.loop = true;
-                audioSource.Play();
-            }
-        }
-        else
-        {
-            if (audioSource.isPlaying && audioSource.clip == moveSound)
-                audioSource.Stop();
-        }
+        if (movementSource == null || moveSound == null) return;
+        bool moving = _agent.velocity.magnitude > 0.05f;
+        if (moving && !movementSource.isPlaying) StartMoveSound();
+        else if (!moving && movementSource.isPlaying) StopMoveSound();
     }
 
+    void PlayOneShot(AudioClip clip)
+    {
+        if (sfxSource != null && clip != null)
+            sfxSource.PlayOneShot(clip);
+    }
+
+#if UNITY_EDITOR
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        Gizmos.color = Color.cyan;
+        int totalRays = 1 + Mathf.Clamp(multiRayCount, 0, BodyOffsets.Length - 1);
+        for (int i = 0; i < totalRays; i++)
+            Gizmos.DrawSphere(transform.position + Vector3.up * BodyOffsets[i], 0.06f);
+    }
+#endif
 }
