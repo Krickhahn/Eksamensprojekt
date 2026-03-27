@@ -62,6 +62,7 @@ public class OrderManager : MonoBehaviour
 
     /// <summary>True når ordren er afleveret og vi venter på office-scanning — selv mens point-teksten ruller.</summary>
     public bool WaitingForOffice { get; private set; }
+    private bool _pendingAdvance;
 
     /// <summary>Den aktive ordre. Null hvis ingen ordre er aktiv.</summary>
     public Order CurrentOrder => (_currentIndex >= 0 && _currentIndex < orders.Count)
@@ -263,24 +264,33 @@ public class OrderManager : MonoBehaviour
             ScoreManager.Instance?.AddScore(order.earnedPoints);
             onOrderComplete?.Invoke(order);
 
-            // Marker at vi er klar til office-scanning allerede nu
-            // så spilleren ikke behøver vente på at pointteksten er færdig
+            // Beregn hvad der sker efter levering
             _currentIndex = -1;
             _nextIndex = orders.FindIndex(o => !o.delivered);
-            WaitingForOffice = _nextIndex >= 0 && !autoStart;
+            bool moreOrders = _nextIndex >= 0;
+            WaitingForOffice = moreOrders && !autoStart;
+
+            // Hvis ingen flere ordrer — fyrer event med det samme
+            // så ExitDoor kan reagere uden at vente på scroll-animation
+            if (!moreOrders)
+            {
+                onAllOrdersComplete?.Invoke();
+                Debug.Log("[OrderManager] Alle ordrer er fuldført!");
+            }
 
             Debug.Log($"[OrderManager] Ordre fuldført: {order.itemID} +{order.earnedPoints} point (base: {order.basePoints}, straf: {order.penaltiesAccrued})");
+            _pendingAdvance = true;
             scannerDisplay?.ShowOrderComplete(order, () =>
             {
-                if (WaitingForOffice)
-                    scannerDisplay?.ShowGoToOffice();
-                else if (_nextIndex >= 0)
-                    ActivateOrder(_nextIndex);
-                else
-                {
-                    onAllOrdersComplete?.Invoke();
+                if (!_pendingAdvance) return;
+                _pendingAdvance = false;
+
+                if (!moreOrders)
                     scannerDisplay?.ShowAllComplete();
-                }
+                else if (WaitingForOffice)
+                    scannerDisplay?.ShowGoToOffice();
+                else
+                    ActivateOrder(_nextIndex);
             });
             return ScanResult.OrderComplete;
         }
@@ -333,6 +343,7 @@ public class OrderManager : MonoBehaviour
     public void GiveNextOrder()
     {
         WaitingForOffice = false;
+        _pendingAdvance = false; // annuller evt. ventende scroll-callback
         int idx = orders.FindIndex(o => !o.delivered);
         if (idx >= 0)
             ActivateOrder(idx);

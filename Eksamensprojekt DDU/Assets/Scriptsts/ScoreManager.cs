@@ -24,8 +24,14 @@ public class ScoreManager : MonoBehaviour
     // ──────────────────────────────────────────────────────────────
     void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
+        DontDestroyOnLoad(gameObject); // 👈 vigtigt
     }
 
     /// <summary>Tilføjer point til totalen og fyrer event.</summary>
