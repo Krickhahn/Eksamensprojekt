@@ -72,39 +72,69 @@ public class PackageSpawner : MonoBehaviour
         int spawned = 0;
         int failed = 0;
 
-        foreach (GameObject prefab in packages)
-        {
-            if (prefab == null) continue;
+        // Lav en kopi så vi kan fjerne pakker der er tvunget til bestemte zoner
+        var remainingPackages = new System.Collections.Generic.List<GameObject>(packages);
+        remainingPackages.RemoveAll(p => p == null);
 
+        // ── Trin 1: Placer pakker der er tvunget til specifikke zoner ──
+        foreach (var wz in zones)
+        {
+            foreach (string reqID in wz.zone.requiredItemIDs)
+            {
+                if (string.IsNullOrEmpty(reqID)) continue;
+
+                // Find første pakke der matcher dette ID
+                GameObject match = remainingPackages.Find(p =>
+                {
+                    var s = p.GetComponent<Scannable>() ?? p.GetComponentInChildren<Scannable>();
+                    return s != null && s.itemID.StartsWith(reqID);
+                });
+
+                if (match == null) continue;
+
+                Vector3 half = GetPrefabHalfExtents(match);
+                Vector3? slot = wz.zone.GetNextSlot(half.y);
+                if (slot.HasValue)
+                {
+                    PlacePackage(match, slot.Value, wz.zone.GetSlotRotation());
+                    remainingPackages.Remove(match);
+                    spawned++;
+                    Debug.Log($"[PackageSpawner] Tvungen placering: '{match.name}' → {wz.zone.gameObject.name}");
+                }
+            }
+        }
+
+        // ── Trin 2: Placer resterende pakker tilfældigt (respektér ekskludering) ──
+        foreach (GameObject prefab in remainingPackages)
+        {
             Vector3 halfExtents = GetPrefabHalfExtents(prefab);
+            var s = prefab.GetComponent<Scannable>() ?? prefab.GetComponentInChildren<Scannable>();
+            string itemID = s != null ? s.itemID : "";
             bool placed = false;
 
-            // Forsøg at placere i en vægtet zone — prøv alle zoner hvis valgte er fuld
-            WeightedZone chosen = PickZone(totalWeight);
+            // Vælg kun zoner der tillader denne pakke
+            WeightedZone chosen = PickZoneForPackage(totalWeight, itemID, null);
             List<WeightedZone> tried = new List<WeightedZone>();
 
             while (chosen != null)
             {
                 Vector3? slot = chosen.zone.GetNextSlot(halfExtents.y);
-
                 if (slot.HasValue)
                 {
-                    Quaternion rot = chosen.zone.GetSlotRotation();
-                    PlacePackage(prefab, slot.Value, rot);
+                    PlacePackage(prefab, slot.Value, chosen.zone.GetSlotRotation());
                     placed = true;
                     break;
                 }
 
-                // Zonen er fuld — prøv en anden
                 tried.Add(chosen);
-                chosen = PickZoneExcluding(totalWeight, tried);
+                chosen = PickZoneForPackage(totalWeight, itemID, tried);
             }
 
             if (placed) spawned++;
             else
             {
                 failed++;
-                Debug.LogWarning($"[PackageSpawner] Alle zoner er fulde — kunne ikke placere '{prefab.name}'.");
+                Debug.LogWarning($"[PackageSpawner] Kunne ikke placere '{prefab.name}' — alle kompatible zoner er fulde eller ekskluderer pakken.");
             }
         }
 
@@ -126,19 +156,15 @@ public class PackageSpawner : MonoBehaviour
             pickup.scannerAnimator = scannerAnimator;
     }
 
-    WeightedZone PickZone(float totalWeight)
+    /// <summary>Vælger en tilfældig zone der tillader pakken med dette ID og har ledige slots.</summary>
+    WeightedZone PickZoneForPackage(float totalWeight, string itemID, List<WeightedZone> exclude)
     {
-        return PickZoneExcluding(totalWeight, null);
-    }
-
-    WeightedZone PickZoneExcluding(float totalWeight, List<WeightedZone> exclude)
-    {
-        // Byg liste over tilgængelige zoner
         float available = 0f;
         foreach (var wz in zones)
         {
             if (exclude != null && exclude.Contains(wz)) continue;
             if (wz.zone.AvailableSlots == 0) continue;
+            if (!wz.zone.AllowsPackage(itemID)) continue;
             available += wz.weight;
         }
 
@@ -151,6 +177,7 @@ public class PackageSpawner : MonoBehaviour
         {
             if (exclude != null && exclude.Contains(wz)) continue;
             if (wz.zone.AvailableSlots == 0) continue;
+            if (!wz.zone.AllowsPackage(itemID)) continue;
             cumulative += wz.weight;
             if (roll <= cumulative) return wz;
         }

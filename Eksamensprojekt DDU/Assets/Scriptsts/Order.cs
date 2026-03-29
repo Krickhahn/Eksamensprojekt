@@ -16,6 +16,9 @@ public class Order
     [Tooltip("Reference til den DeliveryZone pakken skal afleveres i.")]
     public DeliveryZone deliveryZone;
 
+    /// <summary>Reference til den specifikke Scannable-instans — bruges til at matche præcis denne pakke og ingen andre.</summary>
+    [System.NonSerialized] public Scannable targetPackage;
+
     // ── Runtime state ──────────────────────────────────────────────
     /// <summary>Sat til true når pakken er scannet og bekræftet korrekt.</summary>
     [System.NonSerialized] public bool itemConfirmed;

@@ -44,6 +44,9 @@ public class DeliveryZone : MonoBehaviour
     /// </summary>
     public PickupObject PackageInZone { get; private set; }
 
+    /// <summary>Nulstiller PackageInZone — kaldes af OrderManager når en ordre fuldføres.</summary>
+    public void ClearPackage() => PackageInZone = null;
+
     void OnTriggerEnter(Collider other)
     {
         PickupObject pkg = other.GetComponentInParent<PickupObject>();

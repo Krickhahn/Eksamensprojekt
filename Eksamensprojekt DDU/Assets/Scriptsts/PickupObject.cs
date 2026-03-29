@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using static UnityEditor.Experimental.GraphView.GraphView;
 
 /// <summary>
 /// Sæt dette script på ethvert objekt der skal kunne samles op af spilleren.
@@ -101,9 +100,6 @@ public class PickupObject : MonoBehaviour
         }
     }
 
-
-
-
     // FixedUpdate er ikke nødvendig — pakken er kinematic mens den holdes
     // og velocity håndteres ikke via fysikken under hold
 
@@ -167,7 +163,13 @@ public class PickupObject : MonoBehaviour
             gameObject.layer = heldLayer;
 
         if (_player != null)
-            _player.weightMultiplier = Mathf.Max(0f, 1f - weight / (_player.maxCarryWeight + weight));
+        {
+            // Heavy pakker bruger dobbelt vægtstraf
+            float effectiveWeight = (_scannable != null && _scannable.isHeavy)
+                ? weight * 2f
+                : weight;
+            _player.weightMultiplier = Mathf.Max(0f, 1f - effectiveWeight / (_player.maxCarryWeight + effectiveWeight));
+        }
 
         scannerAnimator?.Hide();
 
@@ -234,12 +236,18 @@ public class PickupObject : MonoBehaviour
 
         int penalty = _scannable.fragileDropPenalty;
 
-        // Registrer straffen på den aktive ordre så den kan trækkes fra ved levering
-        Order active = OrderManager.Instance?.CurrentOrder;
-        if (active != null && active.itemID == _scannable.itemID)
-            active.penaltiesAccrued += penalty;
-
-        Debug.Log($"[PickupObject] Fragile pakke ramte gulvet — -{penalty} point (akkumuleret på ordre)");
+        // Find den ordre der tilhører præcis denne pakke-instans
+        // Ordren behøver ikke være aktiv endnu — straffen akkumuleres uanset hvornår pakken tabes
+        Order order = OrderManager.Instance?.FindOrderForPackage(_scannable);
+        if (order != null)
+        {
+            order.penaltiesAccrued += penalty;
+            Debug.Log($"[PickupObject] Fragile pakke ramte gulvet — -{penalty} point akkumuleret (total straf: {order.penaltiesAccrued})");
+        }
+        else
+        {
+            Debug.Log($"[PickupObject] Fragile pakke ramte gulvet — ingen matchende ordre fundet for {_scannable.itemID}");
+        }
     }
 
     void OnCollisionEnter(Collision collision)

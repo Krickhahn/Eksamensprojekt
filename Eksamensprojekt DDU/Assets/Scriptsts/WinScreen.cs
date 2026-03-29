@@ -28,9 +28,15 @@ public class WinScreen : MonoBehaviour
     [Tooltip("Knap til at afslutte spillet.")]
     public Button quitButton;
 
+    [Tooltip("Knap til at gå til hovedmenuen.")]
+    public Button mainMenuButton;
+
     [Header("Indstillinger")]
     [Tooltip("Tekst på titlen.")]
     public string titleMessage = "SKIFT AFSLUTTET";
+
+    [Tooltip("Navnet på din Main Menu scene — skal matche præcist i Build Settings.")]
+    public string mainMenuSceneName = "MainMenu";
 
     // ──────────────────────────────────────────────────────────────
     void Awake()
@@ -42,6 +48,9 @@ public class WinScreen : MonoBehaviour
         if (quitButton != null)
             quitButton.onClick.AddListener(Quit);
 
+        if (mainMenuButton != null)
+            mainMenuButton.onClick.AddListener(GoToMainMenu);
+
         // Canvas starter skjult
         gameObject.SetActive(false);
     }
@@ -51,15 +60,8 @@ public class WinScreen : MonoBehaviour
     {
         gameObject.SetActive(true);
 
-        if (ScoreManager.Instance == null)
-        {
-            Debug.LogError("ScoreManager mangler!");
-            return;
-        }
-
-        int total = ScoreManager.Instance.TotalScore;
-
-        Debug.Log($"Score fundet: {total}");
+        // Vis score
+        int total = ScoreManager.Instance != null ? ScoreManager.Instance.TotalScore : 0;
 
         if (titleText != null)
             titleText.text = titleMessage;
@@ -67,16 +69,26 @@ public class WinScreen : MonoBehaviour
         if (scoreText != null)
             scoreText.text = $"TOTAL SCORE\n{total} PT";
 
+        // Lås musen op så spilleren kan klikke på knapperne
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        // Sæt tid til pause (valgfrit — fjern hvis du ikke vil fryse spillet)
         Time.timeScale = 0f;
+
+        Debug.Log($"[WinScreen] Vist med score: {total}");
     }
 
     void Restart()
     {
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    void GoToMainMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(mainMenuSceneName);
     }
 
     void Quit()

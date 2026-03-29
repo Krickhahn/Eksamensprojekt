@@ -32,6 +32,15 @@ public class SpawnZone : MonoBehaviour
     [Range(0f, 180f)]
     public float maxRotationAngle = 180f;
 
+    [Header("Pakkefilter")]
+    [Tooltip("Pakke-ID'er der ALDRIG må spawne i denne zone.\n" +
+             "Skriv præfikser eller fulde ID'er, ét per felt — f.eks. 'PKG-Heavy' eller 'PKG-003'.")]
+    public List<string> excludedItemIDs = new List<string>();
+
+    [Tooltip("Pakke-ID'er der ALTID spawner i denne zone (hvis de er i puljen).\n" +
+             "Disse pakker tildeles zonen som de første inden tilfældig fordeling.")]
+    public List<string> requiredItemIDs = new List<string>();
+
     [Header("Gizmo")]
     public bool showGizmo = true;
     public Color gizmoColor = new Color(0f, 0.8f, 1f, 0.2f);
@@ -115,6 +124,30 @@ public class SpawnZone : MonoBehaviour
     }
 
     // ──────────────────────────────────────────────────────────────
+    /// <summary>Returnerer true hvis pakken med dette ID må spawne i zonen.</summary>
+    public bool AllowsPackage(string itemID)
+    {
+        if (string.IsNullOrEmpty(itemID)) return true;
+
+        foreach (string ex in excludedItemIDs)
+            if (!string.IsNullOrEmpty(ex) && itemID.StartsWith(ex))
+                return false;
+
+        return true;
+    }
+
+    /// <summary>Returnerer true hvis denne pakke er tvunget til at spawne her.</summary>
+    public bool RequiresPackage(string itemID)
+    {
+        if (string.IsNullOrEmpty(itemID)) return false;
+
+        foreach (string req in requiredItemIDs)
+            if (!string.IsNullOrEmpty(req) && itemID.StartsWith(req))
+                return true;
+
+        return false;
+    }
+
     void Shuffle<T>(List<T> list)
     {
         for (int i = list.Count - 1; i > 0; i--)

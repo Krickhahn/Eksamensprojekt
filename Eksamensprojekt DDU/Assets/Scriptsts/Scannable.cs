@@ -1,17 +1,19 @@
-using UnityEngine;
+﻿using UnityEngine;
+
+public enum PackageType { Standard, Fragile, Heavy }
 
 /// <summary>
-/// S�t dette script p�:
+/// Sæt dette script på:
 ///   - Alle pakker/kasser der kan scannes (type = Package)
 ///   - Alle afleveringszoner (type = DeliveryZone)
 ///
-/// OPS�TNING PAKKE:
-///   - S�t Type til "Package"
+/// OPSÆTNING PAKKE:
+///   - Sæt Type til "Package"
 ///   - Udfyld Item ID med samme varenummer som i Order-dataen
 ///
-/// OPS�TNING AFLEVERINGSZONE:
-///   - S�t Type til "DeliveryZone"
-///   - Tr�k DeliveryZone-komponenten ind i Delivery Zone-feltet
+/// OPSÆTNING AFLEVERINGSZONE:
+///   - Sæt Type til "DeliveryZone"
+///   - Træk DeliveryZone-komponenten ind i Delivery Zone-feltet
 /// </summary>
 public class Scannable : MonoBehaviour
 {
@@ -22,22 +24,29 @@ public class Scannable : MonoBehaviour
     public ScanType type = ScanType.Package;
 
     [Header("Pakke-indstillinger")]
-    [Tooltip("Unikt varenummer � skal matche Order.itemID n�jagtigt.")]
+    [Tooltip("Unikt varenummer — skal matche Order.itemID nøjagtigt.")]
     public string itemID;
 
-    [Tooltip("L�sbart navn der vises p� displayet, f.eks. 'Fragile Box' eller 'Tung Pakke'.\nLad feltet st� tomt for at bruge itemID som navn.")]
+    [Tooltip("Læsbart navn der vises på displayet, f.eks. 'Fragile Box' eller 'Tung Pakke'.\nLad feltet stå tomt for at bruge itemID som navn.")]
     public string itemName = "";
 
     [Tooltip("Antal point spilleren tjener ved korrekt levering af denne pakke.")]
     public int deliveryPoints = 100;
 
-    [Tooltip("Fragile pakker mister point hver gang de rammer gulvet � medmindre de er i en afleveringszone.")]
-    public bool isFragile = false;
+    [Tooltip("Pakkens type bestemmer dens adfærd:\n" +
+             "Standard  — normal pakke, ingen særlige regler\n" +
+             "Fragile   — mister point ved hvert fald på Default-layer\n" +
+             "Heavy     — sænker spillerens bevægelseshastighed mere end normalt")]
+    public PackageType packageType = PackageType.Standard;
 
-    [Tooltip("Point der tr�kkes fra ved hvert fald (kun fragile pakker).")]
+    [Tooltip("Point der trækkes fra ved hvert fald (kun Fragile pakker).")]
     public int fragileDropPenalty = 25;
 
+    // ── Convenience properties ─────────────────────────────────────
+    public bool isFragile => packageType == PackageType.Fragile;
+    public bool isHeavy => packageType == PackageType.Heavy;
+
     [Header("Zone-indstillinger")]
-    [Tooltip("Reference til DeliveryZone-komponenten p� dette objekt (kun relevant hvis type = DeliveryZone).")]
+    [Tooltip("Reference til DeliveryZone-komponenten på dette objekt (kun relevant hvis type = DeliveryZone).")]
     public DeliveryZone deliveryZone;
 }

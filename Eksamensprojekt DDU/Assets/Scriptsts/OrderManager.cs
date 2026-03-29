@@ -109,6 +109,16 @@ public class OrderManager : MonoBehaviour
     /// Registrerer en pakke der er spawned af PackageSpawner.
     /// Skal kaldes inden GenerateOrders kører (dvs. i PackageSpawner.Start).
     /// </summary>
+    /// <summary>
+    /// Finder den ordre der matcher en specifik Scannable-instans.
+    /// Returnerer null hvis ingen ordre er tilknyttet denne pakke.
+    /// </summary>
+    public Order FindOrderForPackage(Scannable pkg)
+    {
+        if (pkg == null) return null;
+        return orders.Find(o => o.targetPackage == pkg);
+    }
+
     public void RegisterPackage(Scannable pkg)
     {
         if (pkg != null && !allPackages.Contains(pkg))
@@ -200,6 +210,7 @@ public class OrderManager : MonoBehaviour
             itemName = resolvedName,
             deliveryZone = zone,
             basePoints = pkg.deliveryPoints,
+            targetPackage = pkg,
         });
     }
 
@@ -227,7 +238,12 @@ public class OrderManager : MonoBehaviour
         // ── Scanning en pakke ──────────────────────────────────────
         if (scanned.type == Scannable.ScanType.Package)
         {
-            if (scanned.itemID != order.itemID)
+            // Tjek at det er præcis den rigtige pakke-instans — ikke bare samme ID
+            bool correctInstance = order.targetPackage != null
+                ? scanned == order.targetPackage
+                : scanned.itemID == order.itemID; // fallback hvis targetPackage ikke er sat
+
+            if (!correctInstance)
             {
                 scannerDisplay?.ShowWrongItem(scanned.itemID, order.itemID);
                 return ScanResult.WrongItem;
@@ -252,13 +268,21 @@ public class OrderManager : MonoBehaviour
             }
 
             Scannable pkgInZone = correctZone.PackageInZone.GetComponent<Scannable>();
-            if (pkgInZone == null || pkgInZone.itemID != order.itemID)
+
+            // Tjek at det er præcis den rigtige pakke-instans i zonen
+            bool correctPkgInZone = order.targetPackage != null
+                ? pkgInZone == order.targetPackage
+                : pkgInZone != null && pkgInZone.itemID == order.itemID;
+
+            if (!correctPkgInZone)
             {
                 scannerDisplay?.ShowWrongPackageInZone(order.itemID);
                 return ScanResult.PackageNotInZone;
             }
 
             // Pakken er i den rigtige zone — ordre fuldført
+            // Nulstil zonen så den er klar til næste ordre
+            correctZone.ClearPackage();
             order.delivered = true;
             order.earnedPoints = Mathf.Max(0, order.basePoints - order.penaltiesAccrued);
             ScoreManager.Instance?.AddScore(order.earnedPoints);
@@ -319,15 +343,11 @@ public class OrderManager : MonoBehaviour
 
     void AdvanceToNextOrder()
     {
-        // Bruges kun af autoStart — manuel flow håndteres via WaitingForOffice
+        // Bruges kun ved autoStart — onAllOrdersComplete er allerede fyret
+        // direkte i TryScan så vi ikke fyrer det to gange
         if (_nextIndex >= 0)
             ActivateOrder(_nextIndex);
-        else
-        {
-            onAllOrdersComplete?.Invoke();
-            scannerDisplay?.ShowAllComplete();
-            Debug.Log("[OrderManager] Alle ordrer er fuldført!");
-        }
+        // Ingen else — all-complete håndteres i TryScan
     }
 
     /// <summary>Returnerer true hvis der er flere ordrer der ikke er afleveret endnu.</summary>
