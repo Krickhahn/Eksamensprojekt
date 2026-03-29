@@ -87,18 +87,19 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowNewOrder(Order order)
     {
-        // Vis kun varenummer og navn — destination afsløres først efter scanning
-        SetLoop(
-            $"{order.itemID} -- {order.itemName}",
-            colorNormal
-        );
+        // Vis varenummer, navn og resterende tid
+        string time = ShiftTimer.Instance != null ? $" [{ShiftTimer.Instance.GetTimeRemainingFormatted()}]" : "";
+        Color col = ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Overtime ? colorWarning
+                       : ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Pressure ? colorWarning
+                       : colorNormal;
+        SetLoop($"{order.itemID} -- {order.itemName}{time}", col);
     }
 
     public void ShowItemConfirmed(Order order)
     {
         // Nu afsløres destinationen
         SetLoop(
-            $"OK: {order.itemID} >> {order.deliveryZone?.zoneName ?? "?"}",
+            $"OK >> {order.deliveryZone?.zoneName ?? "?"}",
             colorSuccess
         );
     }
@@ -124,6 +125,11 @@ public class ScannerDisplay : MonoBehaviour
         onFinished?.Invoke();
     }
 
+    public void ShowShiftEnded()
+    {
+        SetLoop("SKIFTET ER SLUT", colorWarning);
+    }
+
     public void ShowStandBy()
     {
         SetLoop("STAND BY", colorNormal);
@@ -131,32 +137,32 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowGoToOffice()
     {
-        SetLoop("GO TO OFFICE", colorNormal);
+        SetLoop("GA TIL KONTORET", colorNormal);
     }
 
     public void ShowAllComplete()
     {
-        SetLoop("ALL DONE", colorSuccess);
+        SetLoop("ALLE FERDIGE", colorSuccess);
     }
 
     public void ShowWrongItem(string scannedID, string expectedID)
     {
-        PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
+        PlayOnce($"FEJL: {scannedID} != {expectedID}", colorError);
     }
 
     public void ShowWrongZone(DeliveryZone expectedZone)
     {
-        PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
+        PlayOnce($"FEJL ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
     }
 
     public void ShowPackageNotInZone(DeliveryZone zone)
     {
-        PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
+        PlayOnce($"PLACER PAKKE: {zone?.zoneName ?? "?"}", colorWarning);
     }
 
     public void ShowWrongPackageInZone(string expectedID)
     {
-        PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
+        PlayOnce($"FORKERT PAKKE I ZONE: {expectedID}", colorError);
     }
 
     public void ShowCustomMessage(string message, Color color)
@@ -166,7 +172,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowScanPackageFirst()
     {
-        PlayOnce("SCAN PACKAGE FIRST", colorWarning);
+        PlayOnce("SCAN PAKKE FORST", colorWarning);
     }
 
     // ── Scanning ──────────────────────────────────────────────────

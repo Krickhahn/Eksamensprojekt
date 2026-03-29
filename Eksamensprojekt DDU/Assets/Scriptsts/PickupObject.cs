@@ -73,7 +73,8 @@ public class PickupObject : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody>();
         _cam = Camera.main;
-        _scannable = GetComponent<Scannable>();
+        // Søg også i children — Scannable kan sidde på model-child under PickupObject
+        _scannable = GetComponent<Scannable>() ?? GetComponentInChildren<Scannable>();
 
         if (_cam == null)
             Debug.LogWarning("[PickupObject] Intet kamera med 'MainCamera'-tag fundet!");

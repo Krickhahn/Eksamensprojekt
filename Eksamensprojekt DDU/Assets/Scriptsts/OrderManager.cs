@@ -284,7 +284,11 @@ public class OrderManager : MonoBehaviour
             // Nulstil zonen så den er klar til næste ordre
             correctZone.ClearPackage();
             order.delivered = true;
-            order.earnedPoints = Mathf.Max(0, order.basePoints - order.penaltiesAccrued);
+
+            // Anvend timer-multiplikator — jo senere levering, jo færre point
+            float multiplier = ShiftTimer.Instance != null ? ShiftTimer.Instance.ScoreMultiplier : 1f;
+            int baseEarned = Mathf.Max(0, order.basePoints - order.penaltiesAccrued);
+            order.earnedPoints = Mathf.RoundToInt(baseEarned * multiplier);
             ScoreManager.Instance?.AddScore(order.earnedPoints);
             onOrderComplete?.Invoke(order);
 

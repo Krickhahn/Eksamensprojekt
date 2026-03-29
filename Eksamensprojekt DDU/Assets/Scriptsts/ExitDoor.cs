@@ -38,17 +38,23 @@ public class ExitDoor : MonoBehaviour
 
     void Start()
     {
-        // Start bruges i stedet for OnEnable så OrderManager.Instance er klar
         if (OrderManager.Instance != null)
             OrderManager.Instance.onAllOrdersComplete.AddListener(OnAllOrdersComplete);
         else
             Debug.LogWarning("[ExitDoor] OrderManager ikke fundet — win-betingelse virker ikke.");
+
+        // Vis win-screen automatisk når skiftet slutter
+        if (ShiftTimer.Instance != null)
+            ShiftTimer.Instance.onShiftEnd.AddListener(OnShiftEnded);
     }
 
     void OnDestroy()
     {
         if (OrderManager.Instance != null)
             OrderManager.Instance.onAllOrdersComplete.RemoveListener(OnAllOrdersComplete);
+
+        if (ShiftTimer.Instance != null)
+            ShiftTimer.Instance.onShiftEnd.RemoveListener(OnShiftEnded);
     }
 
     void Update()
@@ -75,6 +81,7 @@ public class ExitDoor : MonoBehaviour
 
     void Interact()
     {
+        ShiftTimer.Instance?.StopTimer();
         onPlayerWin?.Invoke();
         winScreen?.Show();
         Debug.Log("[ExitDoor] Spilleren gik ud — du vandt!");
@@ -84,6 +91,14 @@ public class ExitDoor : MonoBehaviour
     {
         _allOrdersComplete = true;
         Debug.Log("[ExitDoor] Alle ordrer fuldført — udgangen er nu tilgængelig.");
+    }
+
+    void OnShiftEnded()
+    {
+        // Skiftet er slut — vis win-screen uanset om alle ordrer er afleveret
+        winScreen?.Show();
+        FindAnyObjectByType<ScannerDisplay>()?.ShowShiftEnded();
+        Debug.Log("[ExitDoor] Skiftet udløb — win-screen vises.");
     }
 
     void OnDrawGizmosSelected()

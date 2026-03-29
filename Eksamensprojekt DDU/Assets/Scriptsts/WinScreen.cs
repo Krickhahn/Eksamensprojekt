@@ -66,8 +66,21 @@ public class WinScreen : MonoBehaviour
         if (titleText != null)
             titleText.text = titleMessage;
 
+        string phase = "";
+        if (ShiftTimer.Instance != null)
+        {
+            phase = ShiftTimer.Instance.Phase switch
+            {
+                ShiftTimer.ShiftPhase.Normal => "Afsluttet tidligt",
+                ShiftTimer.ShiftPhase.Pressure => "Afsluttet i god tid",
+                ShiftTimer.ShiftPhase.Overtime => "Afsluttet i overtid",
+                ShiftTimer.ShiftPhase.Ended => "Skiftet udløb",
+                _ => ""
+            };
+        }
+
         if (scoreText != null)
-            scoreText.text = $"TOTAL SCORE\n{total} PT";
+            scoreText.text = $"TOTAL SCORE\n{total} PT\n{phase}";
 
         // Lås musen op så spilleren kan klikke på knapperne
         Cursor.lockState = CursorLockMode.None;
