@@ -2,13 +2,19 @@
 using UnityEngine.Events;
 
 /// <summary>
-/// Tilføj dette script til et dør-GameObject.
-/// Spilleren kan trykke E for at interagere med døren når alle ordrer er afleveret.
+/// Udgangsdøren spilleren skal nå for at afslutte natten.
+///
+/// Døren låses op på to måder:
+///   1. Alle pakkeordrer er afleveret
+///   2. Skiftets timer løber ud (solen står op)
+///
+/// I begge tilfælde SKAL spilleren fysisk nå hen til døren og trykke E.
+/// Win-screen vises aldrig automatisk — spilleren er aldrig i sikkerhed
+/// bare fordi de venter.
 ///
 /// OPSÆTNING:
-///   1. Tilføj dette script til et GameObject med en Collider.
+///   1. Tilføj dette script til et dør-GameObject med en Collider.
 ///   2. Tilføj WinScreen.cs til et Canvas og træk det ind i Win Screen-feltet.
-///   3. Juster Interact Range og Interact Key efter behov.
 /// </summary>
 public class ExitDoor : MonoBehaviour
 {
@@ -24,11 +30,12 @@ public class ExitDoor : MonoBehaviour
     public WinScreen winScreen;
 
     [Header("Events (valgfrit)")]
+    public UnityEvent onDoorUnlocked;
     public UnityEvent onPlayerWin;
 
     // ── Private ────────────────────────────────────────────────────
     private Camera _cam;
-    private bool _allOrdersComplete;
+    private bool _isUnlocked;
 
     // ──────────────────────────────────────────────────────────────
     void Awake()
@@ -38,28 +45,31 @@ public class ExitDoor : MonoBehaviour
 
     void Start()
     {
+        // Lyt på ordrer fuldført
         if (OrderManager.Instance != null)
-            OrderManager.Instance.onAllOrdersComplete.AddListener(OnAllOrdersComplete);
+            OrderManager.Instance.onAllOrdersComplete.AddListener(UnlockDoor);
         else
-            Debug.LogWarning("[ExitDoor] OrderManager ikke fundet — win-betingelse virker ikke.");
+            Debug.LogWarning("[ExitDoor] OrderManager ikke fundet.");
 
-        // Vis win-screen automatisk når skiftet slutter
+        // Lyt på timer udløbet
         if (ShiftTimer.Instance != null)
-            ShiftTimer.Instance.onShiftEnd.AddListener(OnShiftEnded);
+            ShiftTimer.Instance.onShiftEnd.AddListener(UnlockDoor);
+        else
+            Debug.LogWarning("[ExitDoor] ShiftTimer ikke fundet.");
     }
 
     void OnDestroy()
     {
         if (OrderManager.Instance != null)
-            OrderManager.Instance.onAllOrdersComplete.RemoveListener(OnAllOrdersComplete);
+            OrderManager.Instance.onAllOrdersComplete.RemoveListener(UnlockDoor);
 
         if (ShiftTimer.Instance != null)
-            ShiftTimer.Instance.onShiftEnd.RemoveListener(OnShiftEnded);
+            ShiftTimer.Instance.onShiftEnd.RemoveListener(UnlockDoor);
     }
 
     void Update()
     {
-        if (!_allOrdersComplete) return;
+        if (!_isUnlocked) return;
         if (_cam == null) return;
         if (Cursor.lockState != CursorLockMode.Locked) return;
 
@@ -68,6 +78,25 @@ public class ExitDoor : MonoBehaviour
     }
 
     // ──────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Låser døren op — kaldes både af onAllOrdersComplete og onShiftEnd.
+    /// Spilleren skal stadig nå hen til døren selv.
+    /// </summary>
+    void UnlockDoor()
+    {
+        if (_isUnlocked) return; // undgå dobbelt unlock
+
+        _isUnlocked = true;
+        onDoorUnlocked?.Invoke();
+
+        // Vis besked på skanneren
+        var display = FindAnyObjectByType<ScannerDisplay>();
+        if (ShiftTimer.Instance != null && ShiftTimer.Instance.ShiftEnded)
+            display?.ShowShiftEnded();
+
+        Debug.Log("[ExitDoor] Døren er låst op — spilleren skal nå hen til udgangen.");
+    }
+
     void TryInteract()
     {
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
@@ -84,26 +113,15 @@ public class ExitDoor : MonoBehaviour
         ShiftTimer.Instance?.StopTimer();
         onPlayerWin?.Invoke();
         winScreen?.Show();
-        Debug.Log("[ExitDoor] Spilleren gik ud — du vandt!");
-    }
-
-    void OnAllOrdersComplete()
-    {
-        _allOrdersComplete = true;
-        Debug.Log("[ExitDoor] Alle ordrer fuldført — udgangen er nu tilgængelig.");
-    }
-
-    void OnShiftEnded()
-    {
-        // Skiftet er slut — vis win-screen uanset om alle ordrer er afleveret
-        winScreen?.Show();
-        FindAnyObjectByType<ScannerDisplay>()?.ShowShiftEnded();
-        Debug.Log("[ExitDoor] Skiftet udløb — win-screen vises.");
+        Debug.Log("[ExitDoor] Spilleren nåede udgangen — natten er overstået!");
     }
 
     void OnDrawGizmosSelected()
     {
-        Gizmos.color = new Color(0f, 1f, 0.5f, 0.4f);
+        // Grøn = ulåst, rød = låst
+        Gizmos.color = _isUnlocked
+            ? new Color(0f, 1f, 0.5f, 0.4f)
+            : new Color(1f, 0.2f, 0.2f, 0.4f);
         Gizmos.DrawWireSphere(transform.position, interactRange);
     }
 }

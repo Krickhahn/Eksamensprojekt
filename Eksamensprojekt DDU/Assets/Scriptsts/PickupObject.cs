@@ -73,8 +73,10 @@ public class PickupObject : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody>();
         _cam = Camera.main;
-        // Søg også i children — Scannable kan sidde på model-child under PickupObject
-        _scannable = GetComponent<Scannable>() ?? GetComponentInChildren<Scannable>();
+        // Søg i komponenten selv, children og parent
+        _scannable = GetComponent<Scannable>()
+                  ?? GetComponentInChildren<Scannable>()
+                  ?? GetComponentInParent<Scannable>();
 
         if (_cam == null)
             Debug.LogWarning("[PickupObject] Intet kamera med 'MainCamera'-tag fundet!");
@@ -254,9 +256,16 @@ public class PickupObject : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         if (_isHeld) return;
+
+        // Hent scannable på ny hver gang — sikrer vi har den rigtige selv om hierarki er komplekst
+        if (_scannable == null)
+            _scannable = GetComponent<Scannable>() ?? GetComponentInChildren<Scannable>()
+                      ?? GetComponentInParent<Scannable>();
+
         if (_scannable == null || !_scannable.isFragile) return;
         if (collision.gameObject.layer != 0) return;
 
+        Debug.Log($"[PickupObject] OnCollisionEnter — fragile pakke '{gameObject.name}' ramte '{collision.gameObject.name}' (layer {collision.gameObject.layer})");
         ApplyFragilePenalty();
     }
 

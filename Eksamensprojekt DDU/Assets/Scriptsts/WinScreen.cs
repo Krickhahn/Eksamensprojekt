@@ -60,27 +60,44 @@ public class WinScreen : MonoBehaviour
     {
         gameObject.SetActive(true);
 
-        // Vis score
-        int total = ScoreManager.Instance != null ? ScoreManager.Instance.TotalScore : 0;
+        int baseTotal = ScoreManager.Instance != null ? ScoreManager.Instance.TotalScore : 0;
+        float multiplier = ShiftTimer.Instance != null ? ShiftTimer.Instance.ScoreMultiplier : 1f;
+
+        // Anvend slut-multiplikator på den samlede score
+        // Afleverede pakker er allerede talt — multiplikatoren bruges som en slut-bonus/straf
+        // baseret på hvornår spilleren forlod bygningen
+        int finalTotal = Mathf.RoundToInt(baseTotal * multiplier);
 
         if (titleText != null)
             titleText.text = titleMessage;
 
         string phase = "";
+        string bonus = "";
         if (ShiftTimer.Instance != null)
         {
-            phase = ShiftTimer.Instance.Phase switch
+            switch (ShiftTimer.Instance.Phase)
             {
-                ShiftTimer.ShiftPhase.Normal => "Afsluttet tidligt",
-                ShiftTimer.ShiftPhase.Pressure => "Afsluttet i god tid",
-                ShiftTimer.ShiftPhase.Overtime => "Afsluttet i overtid",
-                ShiftTimer.ShiftPhase.Ended => "Skiftet udløb",
-                _ => ""
-            };
+                case ShiftTimer.ShiftPhase.Normal:
+                    phase = "Afsluttet tidligt";
+                    bonus = $"Tidlig bonus: x{multiplier:F1}";
+                    break;
+                case ShiftTimer.ShiftPhase.Pressure:
+                    phase = "Afsluttet i god tid";
+                    bonus = $"Slut-multiplikator: x{multiplier:F1}";
+                    break;
+                case ShiftTimer.ShiftPhase.Overtime:
+                    phase = "Afsluttet i overtid";
+                    bonus = $"Overtidsstraf: x{multiplier:F2}";
+                    break;
+                case ShiftTimer.ShiftPhase.Ended:
+                    phase = "Skiftet udløb";
+                    bonus = "Ingen bonus";
+                    break;
+            }
         }
 
         if (scoreText != null)
-            scoreText.text = $"TOTAL SCORE\n{total} PT\n{phase}";
+            scoreText.text = $"{phase}\n\nScore: {baseTotal} PT\n{bonus}\n\nFINAL: {finalTotal} PT";
 
         // Lås musen op så spilleren kan klikke på knapperne
         Cursor.lockState = CursorLockMode.None;
@@ -89,7 +106,7 @@ public class WinScreen : MonoBehaviour
         // Sæt tid til pause (valgfrit — fjern hvis du ikke vil fryse spillet)
         Time.timeScale = 0f;
 
-        Debug.Log($"[WinScreen] Vist med score: {total}");
+
     }
 
     void Restart()
