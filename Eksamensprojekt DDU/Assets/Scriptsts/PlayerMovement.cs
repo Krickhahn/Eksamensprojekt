@@ -108,13 +108,24 @@ public class PlayerMovement : MonoBehaviour
     //  PRIVATE STATE
     // ─────────────────────────────────────────────
     private CharacterController _cc;
-    private Vector3 _velocity;          // current move velocity (world space)
-    private float _verticalVelocity;  // Y component handled separately
-    private float _xRotation;         // camera pitch tracker
+    private Vector3 _velocity;
+    private float _verticalVelocity;
+    private float _xRotation;
     private float _bobTimer;
     private Vector3 _cameraLocalOrigin;
     private bool _isCrouching;
     private float _targetHeight;
+
+    // ── Hiding state ──────────────────────────────
+    /// <summary>True mens spilleren er gemt i en papkasse.</summary>
+    public bool IsHiding { get; private set; }
+
+    [Header("Hiding Look Clamp")]
+    [Tooltip("Maksimal vinkel spilleren kan se til siden inde i kassen (grader).")]
+    public float boxLookAngleLimit = 40f;
+
+    // Retning spilleren kigger ud af kassen (world space XZ), sat af CardboardBox
+    private Vector3 _boxExitDirection = Vector3.forward;
 
     // ─────────────────────────────────────────────
     //  INIT
@@ -136,10 +147,42 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     void Update()
     {
+        // Kamera-rotation er tilladt selv når spilleren er gemt
         HandleLook();
+
+        if (IsHiding) return;
+
         HandleCrouch();
         HandleMovement();
         if (enableHeadBob) HandleHeadBob();
+    }
+
+    // ─────────────────────────────────────────────
+    //  HIDING API  ← kaldes af CardboardBox
+    // ─────────────────────────────────────────────
+    /// <summary>
+    /// Aktiverer gemme-tilstand og sætter den retning spilleren kigger ud af kassen.
+    /// exitDirection skal være en normaliseret world-space XZ-vektor.
+    /// </summary>
+    public void SetHiding(bool hiding, Vector3 exitDirection = default)
+    {
+        IsHiding = hiding;
+
+        if (hiding)
+        {
+            // Gem exit-retningen så HandleLook kan klemme rotationen
+            _boxExitDirection = exitDirection == Vector3.zero
+                ? Vector3.forward
+                : new Vector3(exitDirection.x, 0f, exitDirection.z).normalized;
+
+            // Drej spillerens body til at se mod exit-retningen med det samme
+            if (_boxExitDirection != Vector3.zero)
+                transform.rotation = Quaternion.LookRotation(_boxExitDirection);
+
+            // Nulstil bevægelse så spilleren ikke driver ud af kassen
+            _velocity = Vector3.zero;
+            _verticalVelocity = groundedGravity;
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -155,7 +198,21 @@ public class PlayerMovement : MonoBehaviour
         if (cameraTransform != null)
             cameraTransform.localRotation = Quaternion.Euler(_xRotation, 0f, 0f);
 
-        transform.Rotate(Vector3.up * mouseX);
+        if (IsHiding)
+        {
+            // Beregn den vinkel spillerens body ville få efter rotation
+            Quaternion nextRot = transform.rotation * Quaternion.Euler(0f, mouseX, 0f);
+            Vector3 nextForward = nextRot * Vector3.forward;
+
+            // Tillad kun rotation hvis vi stadig er inden for boxLookAngleLimit
+            float angle = Vector3.SignedAngle(_boxExitDirection, nextForward, Vector3.up);
+            if (Mathf.Abs(angle) <= boxLookAngleLimit)
+                transform.Rotate(Vector3.up * mouseX);
+        }
+        else
+        {
+            transform.Rotate(Vector3.up * mouseX);
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -165,7 +222,6 @@ public class PlayerMovement : MonoBehaviour
     {
         bool wantsCrouch = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
 
-        // Try to stand up: check for ceiling
         if (_isCrouching && !wantsCrouch)
         {
             Vector3 top = transform.position + Vector3.up * (standingHeight * 0.5f);
@@ -181,23 +237,18 @@ public class PlayerMovement : MonoBehaviour
             _targetHeight = crouchHeight;
         }
 
-        // Smoothly resize the CharacterController
         float newHeight = Mathf.Lerp(_cc.height, _targetHeight, Time.deltaTime * crouchTransitionSpeed);
-        float delta = newHeight - _cc.height;
         float oldHeight = _cc.height;
 
         _cc.height = newHeight;
 
-        // flyt center kun halvdelen af ændringen
         float centerOffset = (newHeight - oldHeight) / 2f;
         _cc.center += new Vector3(0f, centerOffset, 0f);
 
-        // Flyt kameraet med controller-højden så det følger med ned ved crouch
         if (cameraTransform != null)
         {
-            // Kameraets mål-Y er proportionalt med controller-højden
-            float standingCamY = standingHeight - 0.15f;   // øjenhøjde stående
-            float crouchCamY = crouchHeight - 0.15f;    // øjenhøjde crouching
+            float standingCamY = standingHeight - 0.15f;
+            float crouchCamY = crouchHeight - 0.15f;
             float t = 1f - (_cc.height - crouchHeight) / (standingHeight - crouchHeight);
             float targetCamY = Mathf.Lerp(standingCamY, crouchCamY, t);
 
@@ -214,31 +265,19 @@ public class PlayerMovement : MonoBehaviour
     {
         bool isGrounded = _cc.isGrounded;
 
-        // ── Gravity ──────────────────────────────
         if (isGrounded)
-        {
             _verticalVelocity = groundedGravity;
-        }
         else
-        {
-            _verticalVelocity = Mathf.Max(
-                _verticalVelocity + fallGravity * Time.deltaTime,
-                maxFallSpeed
-            );
-        }
+            _verticalVelocity = Mathf.Max(_verticalVelocity + fallGravity * Time.deltaTime, maxFallSpeed);
 
-        // ── Input ─────────────────────────────────
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
 
         Vector3 inputDir = new Vector3(h, 0f, v);
-        if (inputDir.sqrMagnitude > 1f)
-            inputDir.Normalize();
+        if (inputDir.sqrMagnitude > 1f) inputDir.Normalize();
 
-        // Translate input from local to world space
         Vector3 worldInput = transform.TransformDirection(inputDir);
 
-        // ── Target Speed ──────────────────────────
         float targetSpeed = walkSpeed;
         if (_isCrouching)
             targetSpeed = crouchSpeed;
@@ -247,11 +286,9 @@ public class PlayerMovement : MonoBehaviour
 
         Vector3 targetVelocity = worldInput * targetSpeed * weightMultiplier;
 
-        // ── Accelerate / Decelerate ───────────────
         float rate = inputDir.sqrMagnitude > 0.01f ? acceleration : deceleration;
         _velocity = Vector3.MoveTowards(_velocity, targetVelocity, rate * Time.deltaTime);
 
-        // ── Apply ─────────────────────────────────
         Vector3 move = _velocity + Vector3.up * _verticalVelocity;
         _cc.Move(move * Time.deltaTime);
     }
@@ -270,12 +307,10 @@ public class PlayerMovement : MonoBehaviour
             _bobTimer += Time.deltaTime * bobFrequency;
             float bobY = Mathf.Sin(_bobTimer) * bobAmplitudeY;
             float bobX = Mathf.Sin(_bobTimer * 0.5f) * bobAmplitudeX;
-
             cameraTransform.localPosition = _cameraLocalOrigin + new Vector3(bobX, bobY, 0f);
         }
         else
         {
-            // Smoothly return to rest
             cameraTransform.localPosition = Vector3.Lerp(
                 cameraTransform.localPosition,
                 _cameraLocalOrigin,
@@ -285,7 +320,7 @@ public class PlayerMovement : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────
-    //  GIZMOS  (editor visualisation)
+    //  GIZMOS
     // ─────────────────────────────────────────────
 #if UNITY_EDITOR
     void OnDrawGizmosSelected()
@@ -293,7 +328,6 @@ public class PlayerMovement : MonoBehaviour
         if (_cc == null) _cc = GetComponent<CharacterController>();
         if (_cc == null) return;
 
-        // Draw ceiling check sphere
         Gizmos.color = Color.yellow;
         Vector3 top = transform.position + Vector3.up * (standingHeight * 0.9f);
         Gizmos.DrawWireSphere(top, _cc.radius * 0.9f);
