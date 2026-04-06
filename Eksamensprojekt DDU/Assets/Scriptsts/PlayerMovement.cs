@@ -160,6 +160,9 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     //  HIDING API  ← kaldes af CardboardBox
     // ─────────────────────────────────────────────
+    /// <summary>Returnerer spillerens nuværende vandrette hastighed — bruges af BlindSorter.</summary>
+    public float GetCurrentSpeed() => new Vector3(_velocity.x, 0f, _velocity.z).magnitude;
+
     /// <summary>
     /// Aktiverer gemme-tilstand og sætter den retning spilleren kigger ud af kassen.
     /// exitDirection skal være en normaliseret world-space XZ-vektor.

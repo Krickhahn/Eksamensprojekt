@@ -7,7 +7,6 @@ using UnityEngine.AI;
 [RequireComponent(typeof(NavMeshAgent))]
 public class WeepingAngelEnemy : MonoBehaviour
 {
-    // Wandering er en ny tilstand der bruges mens spilleren er gemt i kassen
     public enum AngelState { Idle, Hunting, Frozen, Wandering }
 
     [Header("Referencer")]
@@ -15,18 +14,12 @@ public class WeepingAngelEnemy : MonoBehaviour
     public Camera playerCamera;
 
     [Header("Line-of-Sight")]
-    [Tooltip("Vinkel i grader fra kameraets forward-vektor der tæller som 'set'")]
     public float freezeAngle = 25f;
-    [Tooltip("Skal være større end freezeAngle – hysteresis forhindrer flimmer ved grænsen")]
     public float unfreezeAngle = 32f;
-    [Tooltip("Antal LOS-checks per sekund")]
     public int losChecksPerSecond = 20;
-    [Tooltip("Lag der kan blokere sigtelinjen")]
     public LayerMask occlusionMask = ~0;
-    [Tooltip("Antal ekstra rays spredt over angel-kroppen (0 = kun én center-ray)")]
     [Range(0, 6)]
     public int multiRayCount = 3;
-    [Tooltip("Margin inden for viewport-kanten der stadig tæller som 'på skærm' (0–0.1)")]
     [Range(0f, 0.1f)]
     public float viewportMargin = 0.02f;
 
@@ -38,13 +31,9 @@ public class WeepingAngelEnemy : MonoBehaviour
     public float attackRange = 1f;
 
     [Header("Wandering (mens spiller er gemt)")]
-    [Tooltip("Radius englen vandrer rundt inden for fra sin startposition")]
     public float wanderRadius = 10f;
-    [Tooltip("Minimum sekunder englen venter ved hvert punkt inden den finder et nyt")]
     public float wanderWaitMin = 1f;
-    [Tooltip("Maksimum sekunder englen venter ved hvert punkt inden den finder et nyt")]
     public float wanderWaitMax = 3f;
-    [Tooltip("Hastighed mens englen vandrer (bør være lavere end moveSpeed)")]
     public float wanderSpeed = 1.5f;
 
     [Header("Adfærd")]
@@ -57,31 +46,25 @@ public class WeepingAngelEnemy : MonoBehaviour
     public AudioSource movementSource;
     public AudioSource sfxSource;
 
-    // ── Runtime ──────────────────────────────────────────────
+    // ── Runtime ───────────────────────────────────────────────────
     private AngelState _state = AngelState.Idle;
     private float _losTimer;
     private float _losInterval;
     private bool _playerLooking;
     private bool _playingFreezeSound;
-
     private Vector3 _startPosition;
     private Quaternion _startRotation;
-
     private Rigidbody _rb;
     private NavMeshAgent _agent;
-
-    // ── Hiding / Wandering state ──────────────────────────────
     private bool _playerIsHiding;
-    private Coroutine _wanderCoroutine;
-
-    // Tilstand inden spilleren gemte sig — bruges til at vende tilbage korrekt
     private AngelState _stateBeforeHide = AngelState.Idle;
+    private Coroutine _wanderCoroutine;
 
     public AngelState CurrentState => _state;
 
     private static readonly float[] BodyOffsets = { 0f, 0.8f, 1.4f, 1.8f, 0.4f, 1.1f, 0.2f };
 
-    // ── Unity Lifecycle ──────────────────────────────────────
+    // ── Init ──────────────────────────────────────────────────────
     void Start()
     {
         _agent = GetComponent<NavMeshAgent>();
@@ -89,10 +72,9 @@ public class WeepingAngelEnemy : MonoBehaviour
 
         if (playerTransform == null)
         {
-            GameObject p = GameObject.FindWithTag("Player");
+            var p = GameObject.FindWithTag("Player");
             if (p != null) playerTransform = p.transform;
         }
-
         if (playerCamera == null)
             playerCamera = Camera.main;
 
@@ -106,7 +88,6 @@ public class WeepingAngelEnemy : MonoBehaviour
         _agent.updatePosition = true;
 
         _losInterval = 1f / Mathf.Max(1, losChecksPerSecond);
-
         _startPosition = transform.position;
         _startRotation = transform.rotation;
     }
@@ -123,12 +104,12 @@ public class WeepingAngelEnemy : MonoBehaviour
             HidingManager.Instance.OnPlayerHidingChanged -= OnPlayerHidingChanged;
     }
 
+    // ── Update ────────────────────────────────────────────────────
     void Update()
     {
         if (_state == AngelState.Idle) return;
 
-        // ── LOS-tjek kører altid — også fra kassen ───────────
-        // Wandering-tilstanden kan fryse englen hvis spilleren kigger ud af kasseåbningen.
+        // LOS-tjek kører altid (også fra kassen — spilleren kan fryse englen fra kassens åbning)
         _losTimer += Time.deltaTime;
         if (_losTimer >= _losInterval)
         {
@@ -138,15 +119,14 @@ public class WeepingAngelEnemy : MonoBehaviour
 
             if (_playerLooking)
             {
-                // Spilleren ser englen — frys uanset hvilken tilstand vi er i
                 if (_state == AngelState.Hunting || _state == AngelState.Wandering)
                     EnterFrozen(wasLooking);
             }
             else
             {
-                // Spilleren ser ikke englen — genoptag relevant tilstand
                 if (_state == AngelState.Frozen)
                 {
+                    // Ikke længere set — hvad skal englen gøre nu?
                     if (_playerIsHiding)
                         EnterWandering();
                     else
@@ -155,17 +135,22 @@ public class WeepingAngelEnemy : MonoBehaviour
             }
         }
 
-        // ── Tilstandsspecifik opdatering ─────────────────────
+        // Tilstandsspecifik opdatering
         switch (_state)
         {
             case AngelState.Hunting:
-                _agent.SetDestination(playerTransform.position);
-                CheckAttackRange();
+                if (!_playerIsHiding && playerTransform != null)
+                {
+                    _agent.isStopped = false;
+                    _agent.SetDestination(playerTransform.position);
+                    CheckAttackRange();
+                }
+                // Bemærk: hvis _playerIsHiding bliver true mens vi er i Hunting,
+                // håndteres skiftet til Wandering af OnPlayerHidingChanged — ikke her
                 UpdateMoveSound();
                 break;
 
             case AngelState.Wandering:
-                // Selve vandringen styres af WanderCoroutine — intet her
                 UpdateMoveSound();
                 break;
 
@@ -175,7 +160,7 @@ public class WeepingAngelEnemy : MonoBehaviour
         }
     }
 
-    // ── Hiding event ─────────────────────────────────────────
+    // ── Hiding-event ──────────────────────────────────────────────
     void OnPlayerHidingChanged(bool isHiding)
     {
         _playerIsHiding = isHiding;
@@ -187,40 +172,38 @@ public class WeepingAngelEnemy : MonoBehaviour
             switch (_state)
             {
                 case AngelState.Hunting:
-                    // Spilleren gemte sig midt i jagten — gå til wandering
                     EnterWandering();
                     break;
-
                 case AngelState.Frozen:
-                    // Spilleren gemte sig mens englen var frosset.
-                    // LOS-tjekket vil nu returnere false (kassen blokerer muligvis),
-                    // og Update() skifter selv til Wandering næste frame.
-                    // Vi starter coroutinen nu for at undgå en frames forsinkelse.
+                    // Englen var frosset — spilleren gemte sig mens den stod stille.
+                    // Start vandring da der ikke længere er nogen at fryse ved.
                     EnterWandering();
                     break;
             }
         }
         else
         {
-            // Spilleren kom ud af kassen
+            // Spilleren trådte ud af kassen
             StopWandering();
-
-            // Tjek straks om spilleren er synlig nu de er trådt ud
             _playerLooking = CheckLineOfSight();
             if (_playerLooking)
                 EnterFrozen(false);
             else
                 EnterHunting();
-
-            Debug.Log($"[{name}] Spiller ude af kassen — genoptager jagt.");
         }
     }
 
-    // ── Lys-events ───────────────────────────────────────────
-    public void OnLightOff() => EnterHunting();
+    // ── Lys-events (kaldes af WarehouseLightController) ───────────
+    public void OnLightOff()
+    {
+        if (_playerIsHiding)
+            EnterWandering();
+        else
+            EnterHunting();
+    }
     public void OnLightOn() => EnterIdle();
 
-    // ── Tilstandsskift ────────────────────────────────────────
+    // ── Tilstandsskift ────────────────────────────────────────────
     void EnterIdle()
     {
         StopWandering();
@@ -264,10 +247,8 @@ public class WeepingAngelEnemy : MonoBehaviour
         _agent.speed = wanderSpeed;
         _agent.isStopped = false;
 
-        StopWandering(); // Stop eventuel eksisterende coroutine
+        StopWandering();
         _wanderCoroutine = StartCoroutine(WanderCoroutine());
-
-        Debug.Log($"[{name}] Vandrer rundt mens spiller er gemt.");
     }
 
     void StopWandering()
@@ -279,19 +260,17 @@ public class WeepingAngelEnemy : MonoBehaviour
         }
     }
 
-    // ── Vandre-coroutine ─────────────────────────────────────
+    // ── Vandre-coroutine ──────────────────────────────────────────
     IEnumerator WanderCoroutine()
     {
         while (true)
         {
-            // Find et tilfældigt punkt på NavMesh inden for wanderRadius
             Vector3 randomPoint = _startPosition + Random.insideUnitSphere * wanderRadius;
-            randomPoint.y = _startPosition.y; // Hold på samme højde som startposition
+            randomPoint.y = _startPosition.y;
 
             if (NavMesh.SamplePosition(randomPoint, out NavMeshHit hit, wanderRadius, NavMesh.AllAreas))
                 _agent.SetDestination(hit.position);
 
-            // Vent til englen er nået frem (eller timeout efter 10 sekunder)
             float timeout = 10f;
             while (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance)
             {
@@ -300,13 +279,11 @@ public class WeepingAngelEnemy : MonoBehaviour
                 yield return null;
             }
 
-            // Vent lidt ved punktet inden næste destination vælges
-            float waitTime = Random.Range(wanderWaitMin, wanderWaitMax);
-            yield return new WaitForSeconds(waitTime);
+            yield return new WaitForSeconds(Random.Range(wanderWaitMin, wanderWaitMax));
         }
     }
 
-    // ── Hjælpe-coroutines ─────────────────────────────────────
+    // ── Hjælpe-coroutines ─────────────────────────────────────────
     IEnumerator ResetFreezeSoundFlag(float delay)
     {
         yield return new WaitForSeconds(delay);
@@ -322,27 +299,22 @@ public class WeepingAngelEnemy : MonoBehaviour
             yield return null;
         }
 
-        if (_agent != null)
-            _agent.isStopped = true;
-
+        if (_agent != null) _agent.isStopped = true;
         transform.position = _startPosition;
         transform.rotation = _startRotation;
     }
 
-    // ── Line-of-Sight ─────────────────────────────────────────
+    // ── Line-of-Sight ─────────────────────────────────────────────
     bool CheckLineOfSight()
     {
         if (playerCamera == null || playerTransform == null) return false;
 
         int totalRays = 1 + Mathf.Clamp(multiRayCount, 0, BodyOffsets.Length - 1);
-
         for (int i = 0; i < totalRays; i++)
         {
-            Vector3 target = transform.position + Vector3.up * BodyOffsets[i];
-            if (IsSinglePointVisible(target))
+            if (IsSinglePointVisible(transform.position + Vector3.up * BodyOffsets[i]))
                 return true;
         }
-
         return false;
     }
 
@@ -362,8 +334,8 @@ public class WeepingAngelEnemy : MonoBehaviour
         float threshold = (_state == AngelState.Frozen) ? unfreezeAngle : freezeAngle;
         if (angle > threshold) return false;
 
-        float distance = Vector3.Distance(eyePos, worldTarget);
-        if (Physics.Raycast(eyePos, dirToTarget, out RaycastHit hit, distance + 0.1f, occlusionMask))
+        float dist = Vector3.Distance(eyePos, worldTarget);
+        if (Physics.Raycast(eyePos, dirToTarget, out RaycastHit hit, dist + 0.1f, occlusionMask))
         {
             bool hitAngel = hit.transform == transform || hit.transform.IsChildOf(transform);
             if (!hitAngel) return false;
@@ -375,21 +347,20 @@ public class WeepingAngelEnemy : MonoBehaviour
         return true;
     }
 
-    // ── Attack ───────────────────────────────────────────────
+    // ── Angreb ────────────────────────────────────────────────────
     void CheckAttackRange()
     {
-        if (playerTransform == null) return;
-        if (_playerIsHiding) return;
+        if (playerTransform == null || _playerIsHiding) return;
 
         if (Vector3.Distance(transform.position, playerTransform.position) <= attackRange)
         {
             EnterIdle();
             PlayOneShot(killSound);
-            GameOverManager.Instance?.TriggerGameOver();
+            GameOverManager.Instance?.TriggerGameOver("Du blev fanget af englen...");
         }
     }
 
-    // ── Lyd ──────────────────────────────────────────────────
+    // ── Lyd ───────────────────────────────────────────────────────
     void StartMoveSound()
     {
         if (movementSource == null || moveSound == null) return;
@@ -400,8 +371,7 @@ public class WeepingAngelEnemy : MonoBehaviour
 
     void StopMoveSound()
     {
-        if (movementSource != null && movementSource.isPlaying)
-            movementSource.Stop();
+        if (movementSource != null && movementSource.isPlaying) movementSource.Stop();
     }
 
     void UpdateMoveSound()
@@ -409,13 +379,12 @@ public class WeepingAngelEnemy : MonoBehaviour
         if (movementSource == null || moveSound == null) return;
         bool moving = _agent.velocity.magnitude > 0.05f;
         if (moving && !movementSource.isPlaying) StartMoveSound();
-        else if (!moving && movementSource.isPlaying) StopMoveSound();
+        if (!moving && movementSource.isPlaying) StopMoveSound();
     }
 
     void PlayOneShot(AudioClip clip)
     {
-        if (sfxSource != null && clip != null)
-            sfxSource.PlayOneShot(clip);
+        if (sfxSource != null && clip != null) sfxSource.PlayOneShot(clip);
     }
 
 #if UNITY_EDITOR
@@ -423,15 +392,12 @@ public class WeepingAngelEnemy : MonoBehaviour
     {
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
-
+        Gizmos.color = new Color(1f, 0.5f, 0f, 0.2f);
+        Gizmos.DrawWireSphere(Application.isPlaying ? _startPosition : transform.position, wanderRadius);
         Gizmos.color = Color.cyan;
         int totalRays = 1 + Mathf.Clamp(multiRayCount, 0, BodyOffsets.Length - 1);
         for (int i = 0; i < totalRays; i++)
             Gizmos.DrawSphere(transform.position + Vector3.up * BodyOffsets[i], 0.06f);
-
-        // Vis wander-radius
-        Gizmos.color = new Color(1f, 0.5f, 0f, 0.3f);
-        Gizmos.DrawWireSphere(Application.isPlaying ? _startPosition : transform.position, wanderRadius);
     }
 #endif
 }
