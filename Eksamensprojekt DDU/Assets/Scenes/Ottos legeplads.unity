@@ -119,6 +119,39 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &9074950
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9074951}
+  m_Layer: 9
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &9074951
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9074950}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 4710589399869727123}
+  - {fileID: 1435426745}
+  m_Father: {fileID: 990851809927290597}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &36398391
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3692,19 +3725,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a791067c40aad3d44ad475ac6e3c5bc2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DrunkGrinderEnemy
-  leftHip: {fileID: 0}
-  rightHip: {fileID: 0}
-  leftLowerLeg: {fileID: 0}
-  rightLowerLeg: {fileID: 0}
-  leftForearm: {fileID: 0}
-  rightForearm: {fileID: 0}
+  leftHip: {fileID: 2798677457807425110}
+  rightHip: {fileID: 3794172645707294024}
+  leftLowerLeg: {fileID: 3303046710092223690}
+  rightLowerLeg: {fileID: 2502149408065737587}
+  leftForearm: {fileID: 5717222173421664394}
+  rightForearm: {fileID: 990851809927290597}
+  sawPivot: {fileID: 990851809927290597}
+  sawBlade: {fileID: 1435426745}
+  sawSpinSpeed: 720
+  sawSwingAngle: 35
+  sawSwingFreq: 1.4
+  hoverAmplitude: 0.15
+  hoverFrequency: 0.9
+  hoverBaseOffset: 0.18
+  bodyVisual: {fileID: 2215535924188767324}
   player: {fileID: 539615641}
   playerSearchInterval: 1
   gameOverSubtitle: Du blev savet i stykker...
   pullOutOffset: {x: 0.6, y: 0, z: 0.8}
   searchSpeed: 0.8
   chaseSpeed: 2.4
-  wanderStep: 2
+  wanderRadius: 8
+  wanderMinDist: 2.5
+  wanderWaitTime: 1.8
+  wanderRetryInterval: 0.5
+  wanderNavSampleDist: 2
   detectionRange: 8
   attackRange: 1.5
   loseSightRange: 14
@@ -3892,13 +3938,26 @@ MonoBehaviour:
   rightLowerLeg: {fileID: 0}
   leftForearm: {fileID: 0}
   rightForearm: {fileID: 0}
+  sawPivot: {fileID: 0}
+  sawBlade: {fileID: 0}
+  sawSpinSpeed: 720
+  sawSwingAngle: 35
+  sawSwingFreq: 1.4
+  hoverAmplitude: 0.08
+  hoverFrequency: 1.1
+  hoverBaseOffset: 0.18
+  bodyVisual: {fileID: 0}
   player: {fileID: 0}
   playerSearchInterval: 1
   gameOverSubtitle: Du blev savet i stykker...
   pullOutOffset: {x: 0.6, y: 0, z: 0.8}
   searchSpeed: 0.8
   chaseSpeed: 2.4
-  wanderStep: 2
+  wanderRadius: 8
+  wanderMinDist: 2.5
+  wanderWaitTime: 1.8
+  wanderRetryInterval: 0.5
+  wanderNavSampleDist: 2
   detectionRange: 8
   attackRange: 1.5
   loseSightRange: 14
@@ -5512,6 +5571,38 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1410401947}
   m_CullTransparentMesh: 1
+--- !u!1 &1435426744
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1435426745}
+  m_Layer: 9
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1435426745
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1435426744}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.70587134, z: 0.70834005, w: 0}
+  m_LocalPosition: {x: -0.905617, y: 4.4464655, z: -2.8529427}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 6840217509070196384}
+  m_Father: {fileID: 9074951}
+  m_LocalEulerAnglesHint: {x: 359.8, y: 0, z: 0}
 --- !u!1 &1448339691
 GameObject:
   m_ObjectHideFlags: 0
@@ -7567,7 +7658,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 4710589399869727123}
+  - {fileID: 9074951}
   m_Father: {fileID: 2215535924188767324}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1012426726066864190
@@ -8206,13 +8297,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 567446938584414339}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 2.326743, y: -0.7253817, z: -12.367262}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 2.326743, y: -0.72537994, z: -12.36726}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 6840217509070196384}
-  m_Father: {fileID: 990851809927290597}
+  m_Children: []
+  m_Father: {fileID: 9074951}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!23 &5018479170542885931
 MeshRenderer:
@@ -8643,12 +8733,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 9048037970666051722}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0, y: 0, z: 0}
+  m_LocalRotation: {x: -0, y: 0.7071067, z: 0.7071068, w: 0}
+  m_LocalPosition: {x: -3.23236, y: -9.514317, z: -5.1718473}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 4710589399869727123}
+  m_Father: {fileID: 1435426745}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &6990616535292384161
 MeshFilter:
