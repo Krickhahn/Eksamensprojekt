@@ -94,6 +94,13 @@ public class WeepingAngelEnemy : MonoBehaviour
 
     void OnEnable()
     {
+        StartCoroutine(RegisterHidingListener());
+    }
+
+    IEnumerator RegisterHidingListener()
+    {
+        // Vent én frame så alle Awake/Start er kørt og HidingManager.Instance er sat
+        yield return null;
         if (HidingManager.Instance != null)
             HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
     }
@@ -265,17 +272,27 @@ public class WeepingAngelEnemy : MonoBehaviour
     {
         while (true)
         {
-            Vector3 randomPoint = _startPosition + Random.insideUnitSphere * wanderRadius;
-            randomPoint.y = _startPosition.y;
+            // Vandrer fra nuværende position — ikke startposition
+            // så englen ikke forsøger at gå til den anden side af scenen
+            Vector3 origin = transform.position;
+            Vector3 randomPoint = origin + new Vector3(
+                Random.Range(-wanderRadius, wanderRadius),
+                0f,
+                Random.Range(-wanderRadius, wanderRadius));
 
             if (NavMesh.SamplePosition(randomPoint, out NavMeshHit hit, wanderRadius, NavMesh.AllAreas))
+            {
+                _agent.isStopped = false;
                 _agent.SetDestination(hit.position);
+            }
 
-            float timeout = 10f;
-            while (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance)
+            // Vent til englen er nået frem eller timeout
+            float timeout = 8f;
+            while (timeout > 0f)
             {
                 timeout -= Time.deltaTime;
-                if (timeout <= 0f) break;
+                if (!_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance + 0.1f)
+                    break;
                 yield return null;
             }
 

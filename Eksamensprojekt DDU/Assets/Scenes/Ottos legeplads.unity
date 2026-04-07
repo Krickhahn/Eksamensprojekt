@@ -1094,13 +1094,13 @@ MonoBehaviour:
   hauntSpawnMaxDist: 9
   hauntVisibleDuration: 5
   hauntDetectAngle: 35
-  hauntCooldownMin: 60
-  hauntCooldownMax: 90
+  hauntCooldownMin: 0
+  hauntCooldownMax: 1
   stalkKillTime: 7
   lookBackAngle: 130
   stalkChanceAfterHaunt: 0.35
-  stalkCooldown: 90
-  stalkOnlyWhenLightsOn: 1
+  stalkCooldown: 1
+  stalkOnlyWhenLightsOn: 0
   footstepSource: {fileID: 1185630469}
   footstepLoop: {fileID: 8300000, guid: f6fce1171e3d28d48a0206f9fcf9aca9, type: 3}
   sfxSource: {fileID: 0}
@@ -2929,7 +2929,7 @@ GameObject:
   - component: {fileID: 720851550}
   - component: {fileID: 720851549}
   - component: {fileID: 720851548}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Capsule (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2958,7 +2958,7 @@ MonoBehaviour:
   patrolSpeed: 1.8
   investigateSpeed: 2.5
   chaseSpeed: 6
-  attackRange: 1.2
+  attackRange: 1.5
   patrolPoints:
   - {fileID: 623374622}
   patrolWaitTime: 2
