@@ -131,6 +131,12 @@ public class DrunkGrinderEnemy : MonoBehaviour
     private float _hoverTime;
     private Vector3 _bodyVisualLocalBase;
 
+    // Saw animation
+    private float _sawNoiseOffset;        // unikt Perlin-seed per instans
+    private float _sawSwingTime;          // akkumuleret tid til swing-kurven
+    private float _sawCurrentAngleX;      // glat interpoleret nuværende vinkel X
+    private float _sawCurrentAngleZ;      // glat interpoleret nuværende vinkel Z (sideværts svajer)
+
     // Wander
     private Vector3 _wanderTarget;
     private bool _hasWanderTarget;
@@ -146,6 +152,13 @@ public class DrunkGrinderEnemy : MonoBehaviour
     private bool _hasTriggeredGameOver;
     private bool _lastCanSeePlayer;
 
+    // Hiding-jagt
+    // _sawPlayerHide = true:  fjenden SAV spilleren gemme sig → fortsætter jagt mod kassen
+    // _sawPlayerHide = false: spilleren gemte sig uden at blive set → fjenden giver op
+    private bool _sawPlayerHide;
+    private Vector3 _lastSeenPosition;   // position fjenden jager mod når spilleren er gemt
+    private bool _hasLastSeenPos;
+
     // ─────────────────────────────────────────────────────────────
     // Unity lifecycle
     // ─────────────────────────────────────────────────────────────
@@ -156,6 +169,9 @@ public class DrunkGrinderEnemy : MonoBehaviour
         // Gem krop-visual's lokale start-position så vi kan animere relativt
         if (bodyVisual != null)
             _bodyVisualLocalBase = bodyVisual.localPosition;
+
+        // Unikt Perlin-seed per fjende-instans så de ikke svinger synkront
+        _sawNoiseOffset = Random.Range(0f, 100f);
     }
 
     private void OnEnable()
@@ -177,6 +193,10 @@ public class DrunkGrinderEnemy : MonoBehaviour
     {
         TryFindPlayer(true);
 
+        // Synkroniser hiding-state igen i Start – HidingManager er garanteret klar nu
+        if (HidingManager.Instance != null)
+            _playerIsHiding = HidingManager.Instance.IsPlayerHiding;
+
         // Sæt NavMesh-agent til ikke at rotere selv – vi styrer rotation manuelt
         if (_agent != null)
             _agent.updateRotation = false;
@@ -196,7 +216,13 @@ public class DrunkGrinderEnemy : MonoBehaviour
         AnimateHover();
         TickGrinderSound();
 
-        if (_state == State.Chase && IsWithinAttackRange() && CanSeePlayer())
+        // Game over hvis fjenden er tæt nok og:
+        // - spilleren er synlig (ikke gemt), ELLER
+        // - spilleren er gemt OG fjenden SAV dem gemme sig og er nået frem til kassen
+        bool attackCondition = _state == State.Chase && IsWithinAttackRange()
+            && (!_playerIsHiding ? CanSeePlayer() : _sawPlayerHide);
+
+        if (attackCondition)
             TriggerGameOverAndPullOut();
     }
 
@@ -223,35 +249,58 @@ public class DrunkGrinderEnemy : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     private void TickState()
     {
+        // Mens spilleren er gemt er CanSeePlayer() altid false (mesh + collider skjult).
+        // Vi bruger _sawPlayerHide til at huske om fjenden SAV dem gemme sig.
         _lastCanSeePlayer = CanSeePlayer();
         float dist = Vector3.Distance(transform.position, player.position);
 
         if (_state == State.Search)
         {
-            // Spilleren skal BÅDE være inden for range OG i sigte for at starte jagt
-            if (_lastCanSeePlayer && dist <= detectionRange)
+            // Start jagt kun hvis spilleren ER synlig og inden for range (aldrig gemt)
+            if (!_playerIsHiding && _lastCanSeePlayer && dist <= detectionRange)
                 EnterChase();
         }
         else // Chase
         {
             if (_playerIsHiding)
             {
-                if (_lastCanSeePlayer)
-                    TriggerGameOverAndPullOut();
+                if (_sawPlayerHide)
+                {
+                    // Fjenden så spilleren gemme sig → løb til lastSeenPosition (kassen)
+                    // Når den ankommer uden at se spilleren: giv op
+                    if (_hasLastSeenPos)
+                    {
+                        float distToBox = Vector3.Distance(transform.position, _lastSeenPosition);
+                        if (distToBox <= attackRange)
+                        {
+                            // Tjek om spilleren stadig er i kassen – game over
+                            TriggerGameOverAndPullOut();
+                            return;
+                        }
+                    }
+                    // Ellers: bliv i Chase og TickChaseMovement bruger _lastSeenPosition
+                }
                 else
+                {
+                    // Spilleren gemte sig uden at blive set → stop jagt
                     EnterSearch();
+                }
                 return;
             }
 
-            if (!_lastCanSeePlayer)
+            // Spilleren er ikke gemt – normal jagt-logik
+            if (_lastCanSeePlayer)
+            {
+                _lostSightTimer = 0f;
+                // Opdater last seen position løbende mens spilleren er synlig
+                _lastSeenPosition = player.position;
+                _hasLastSeenPos = true;
+            }
+            else
             {
                 _lostSightTimer += Time.deltaTime;
                 if (_lostSightTimer >= loseSightTime || dist > loseSightRange)
                     EnterSearch();
-            }
-            else
-            {
-                _lostSightTimer = 0f;
             }
         }
     }
@@ -262,6 +311,8 @@ public class DrunkGrinderEnemy : MonoBehaviour
         _lostSightTimer = 0f;
         _hasWanderTarget = false;
         _isWaiting = false;
+        _sawPlayerHide = false;
+        _hasLastSeenPos = false;
         if (_agent != null && _agent.isActiveAndEnabled)
             _agent.ResetPath();
     }
@@ -290,14 +341,20 @@ public class DrunkGrinderEnemy : MonoBehaviour
     private void TickChaseMovement()
     {
         SetAgentSpeed(chaseSpeed);
+
+        // Hvis spilleren er gemt og fjenden så det: naviger mod lastSeenPosition (kassen)
+        // Ellers: naviger direkte mod spilleren
+        Vector3 destination = (_playerIsHiding && _sawPlayerHide && _hasLastSeenPos)
+            ? _lastSeenPosition
+            : player.position;
+
         if (_agent != null && _agent.isActiveAndEnabled)
         {
-            _agent.SetDestination(player.position);
+            _agent.SetDestination(destination);
         }
         else
         {
-            // Fallback uden NavMesh
-            Vector3 dir = (player.position - transform.position);
+            Vector3 dir = (destination - transform.position);
             dir.y = 0f;
             if (dir.sqrMagnitude > 0.001f)
             {
@@ -433,6 +490,9 @@ public class DrunkGrinderEnemy : MonoBehaviour
     {
         if (player == null) return false;
 
+        // Mens spilleren er gemt er de usynlige – fjenden kan ikke spotte dem via syn
+        if (_playerIsHiding) return false;
+
         Vector3 eyePos = transform.position + Vector3.up * eyeHeight;
         Vector3 targetPos = player.position + Vector3.up * playerTargetHeight;
 
@@ -458,13 +518,36 @@ public class DrunkGrinderEnemy : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     private void OnPlayerHidingChanged(bool hiding)
     {
-        _playerIsHiding = hiding;
-        if (_state != State.Chase || _hasTriggeredGameOver) return;
-
         if (hiding)
         {
-            if (CanSeePlayer()) TriggerGameOverAndPullOut();
-            else EnterSearch();
+            // VIGTIGT: Tjek syn FØR _playerIsHiding sættes til true.
+            // CanSeePlayer() returnerer altid false hvis _playerIsHiding allerede er true,
+            // så vi skal vide om fjenden kan se spilleren mens de stadig er "synlige".
+            bool canSeeRightNow = CanSeePlayer();
+
+            _playerIsHiding = true;
+
+            if (_state == State.Chase && canSeeRightNow)
+            {
+                // Fjenden SAV spilleren gemme sig – løb mod kassen
+                _sawPlayerHide = true;
+                _lastSeenPosition = player.position;
+                _hasLastSeenPos = true;
+            }
+            else if (_state == State.Chase)
+            {
+                // Fjenden jagtede men så dem IKKE gemme sig → stop jagt
+                _sawPlayerHide = false;
+                EnterSearch();
+            }
+            // Hvis fjenden er i Search: _playerIsHiding er nu sat,
+            // så CanSeePlayer() og TickState() ignorerer spilleren automatisk.
+        }
+        else
+        {
+            _playerIsHiding = false;
+            _sawPlayerHide = false;
+            _hasLastSeenPos = false;
         }
     }
 
@@ -563,27 +646,58 @@ public class DrunkGrinderEnemy : MonoBehaviour
 
     // ─────────────────────────────────────────────────────────────
     // Animation – Rundsav
+    //
+    // Bladet spinner altid (spøgelse holder altid saven kørende).
+    // Pivot-swingning sker KUN under Chase og varieres med Perlin
+    // noise så ingen to svingninger ligner hinanden.
+    // Under Search vender pivot blødt tilbage til hvile-positionen.
     // ─────────────────────────────────────────────────────────────
     private void AnimateSaw()
     {
-        // Spin selve bladet
+        // Bladet spinner altid – det ville et fuld spøgelse gøre
         if (sawBlade != null)
             sawBlade.Rotate(Vector3.right, sawSpinSpeed * Time.deltaTime, Space.Self);
 
-        // Sving pivot'en frem og tilbage
-        if (sawPivot != null)
+        if (sawPivot == null) return;
+
+        float targetX, targetZ;
+
+        if (_state == State.Chase)
         {
-            // Hurtigere/mere aggressiv svingning under jagt
-            float freq = (_state == State.Chase) ? sawSwingFreq * 1.6f : sawSwingFreq;
-            float amplitude = (_state == State.Chase) ? sawSwingAngle * 1.3f : sawSwingAngle;
+            // Akkumuler tid til grundlæggende swing-rytme
+            _sawSwingTime += Time.deltaTime * sawSwingFreq;
 
-            float swingAngle = Mathf.Sin(Time.time * freq * Mathf.PI * 2f) * amplitude;
+            // Basis frem/tilbage swing via sin
+            float baseSwing = Mathf.Sin(_sawSwingTime * Mathf.PI * 2f) * sawSwingAngle;
 
-            Vector3 euler = sawPivot.localEulerAngles;
-            // Sving i X-aksen (frem/tilbage) – juster til din rigs akse
-            euler.x = swingAngle;
-            sawPivot.localEulerAngles = euler;
+            // Perlin noise tilføjer variation i amplitude og fase
+            // – to separate noise-kanaler for X og Z så de er uafhængige
+            float noiseX = Mathf.PerlinNoise(_sawSwingTime * 0.7f + _sawNoiseOffset, 0f) * 2f - 1f;
+            float noiseZ = Mathf.PerlinNoise(0f, _sawSwingTime * 0.5f + _sawNoiseOffset + 13.7f) * 2f - 1f;
+
+            // X = primær svingning frem/tilbage + noise-variation
+            targetX = baseSwing + noiseX * sawSwingAngle * 0.45f;
+
+            // Z = sideværts svajer – ren noise, ingen base-sin
+            //     Giver fornemmelse af at fjenden hugger lidt skævt
+            targetZ = noiseZ * sawSwingAngle * 0.30f;
         }
+        else
+        {
+            // Search: saven hviler stille langs siden
+            targetX = 0f;
+            targetZ = 0f;
+        }
+
+        // Glat interpolation mod mål – undgår hakkende spring
+        float lerpSpeed = (_state == State.Chase) ? jointSmoothSpeed * 1.2f : jointSmoothSpeed * 0.6f;
+        _sawCurrentAngleX = Mathf.Lerp(_sawCurrentAngleX, targetX, Time.deltaTime * lerpSpeed);
+        _sawCurrentAngleZ = Mathf.Lerp(_sawCurrentAngleZ, targetZ, Time.deltaTime * lerpSpeed);
+
+        Vector3 euler = sawPivot.localEulerAngles;
+        euler.x = _sawCurrentAngleX;
+        euler.z = _sawCurrentAngleZ;
+        sawPivot.localEulerAngles = euler;
     }
 
     private void SetXRotation(Transform t, float xDeg)
@@ -625,15 +739,15 @@ public class DrunkGrinderEnemy : MonoBehaviour
         Gizmos.color = Color.gray;
         Gizmos.DrawWireSphere(transform.position, loseSightRange);
 
-        Vector3 eye  = transform.position + Vector3.up * eyeHeight;
-        float   half = viewAngle * 0.5f;
+        Vector3 eye = transform.position + Vector3.up * eyeHeight;
+        float half = viewAngle * 0.5f;
 
         // Vis syn-kegle korrekt fremad (ingen 180° flip)
-        Vector3 leftDir  = Quaternion.AngleAxis(-half, Vector3.up) * transform.forward;
-        Vector3 rightDir = Quaternion.AngleAxis( half, Vector3.up) * transform.forward;
+        Vector3 leftDir = Quaternion.AngleAxis(-half, Vector3.up) * transform.forward;
+        Vector3 rightDir = Quaternion.AngleAxis(half, Vector3.up) * transform.forward;
 
         Gizmos.color = new Color(1f, 0.9f, 0.2f, 1f);
-        Gizmos.DrawLine(eye, eye + leftDir  * detectionRange);
+        Gizmos.DrawLine(eye, eye + leftDir * detectionRange);
         Gizmos.DrawLine(eye, eye + rightDir * detectionRange);
 
         // Wander-mål
@@ -650,7 +764,7 @@ public class DrunkGrinderEnemy : MonoBehaviour
             Gizmos.color = _lastCanSeePlayer ? Color.green : Color.magenta;
             Gizmos.DrawLine(eye, p);
             Gizmos.DrawSphere(eye, 0.05f);
-            Gizmos.DrawSphere(p,   0.05f);
+            Gizmos.DrawSphere(p, 0.05f);
         }
     }
 #endif

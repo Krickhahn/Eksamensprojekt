@@ -2,15 +2,36 @@
 using UnityEngine;
 using UnityEngine.AI;
 
+/// <summary>
+/// Schizofrenifejnden med pose-support.
+///
+/// POSES — to metoder at sætte op:
+///   A) Animator: Tilføj en Animator til fjende-prefabben med states der matcher
+///      navnene i hauntPoses (fx "Pose_Point", "Pose_Crouch", "Pose_Scream").
+///      Scriptet kalder animator.Play(poseName) ved hver haunting.
+///
+///   B) poseObjects: Opret separate child-GameObjects (ét per pose — fx hver
+///      med en anden mesh/rotation slået til) og træk dem ind i poseObjects.
+///      Scriptet aktiverer ét tilfældigt objekt og deaktiverer de øvrige.
+///
+///   Begge systemer virker uden asset — poses springes bare over hvis
+///   hverken Animator eller poseObjects er sat op.
+/// </summary>
 [RequireComponent(typeof(NavMeshAgent))]
 public class SchizoEnemy : MonoBehaviour
 {
     public enum SchizoState { Inactive, Haunting, Stalking }
 
+    // ─────────────────────────────────────────────
+    //  REFERENCER
+    // ─────────────────────────────────────────────
     [Header("Referencer")]
     public Transform playerTransform;
     public Camera playerCamera;
 
+    // ─────────────────────────────────────────────
+    //  HAUNTING
+    // ─────────────────────────────────────────────
     [Header("Haunting (atmosfærisk)")]
     public float hauntSpawnMinDist = 4f;
     public float hauntSpawnMaxDist = 9f;
@@ -19,15 +40,35 @@ public class SchizoEnemy : MonoBehaviour
     public float hauntCooldownMin = 25f;
     public float hauntCooldownMax = 55f;
 
+    // ─────────────────────────────────────────────
+    //  POSES
+    // ─────────────────────────────────────────────
+    [Header("Poses")]
+    [Tooltip("Animator på fjende-meshens GameObject. Kan være null — tilføjes når du har et asset.")]
+    public Animator animator;
+
+    [Tooltip("Navne på Animator-states brugt som poses. Et tilfældigt vælges ved hver haunting.")]
+    public string[] hauntPoses = { "Pose_Idle", "Pose_Point", "Pose_Crouch", "Pose_Scream", "Pose_Stare" };
+
+    [Tooltip("Alternativ til Animator: separate child-GameObjects per pose. " +
+             "Kun ét aktiveres ad gangen. Lad stå tomt hvis du bruger Animator.")]
+    public GameObject[] poseObjects;
+
+    // ─────────────────────────────────────────────
+    //  STALKING
+    // ─────────────────────────────────────────────
     [Header("Stalking (dødelig)")]
     public float stalkKillTime = 7f;
-    [Tooltip("Vinklen spillerens kamera skal dreje væk fra fodtrins-retningen for at afbryde (grader)")]
+    [Tooltip("Vinklen spillerens kamera skal dreje mod fodtrins-retningen for at afbryde (grader)")]
     public float lookBackAngle = 100f;
     [Range(0f, 1f)]
     public float stalkChanceAfterHaunt = 0.35f;
     public float stalkCooldown = 90f;
     public bool stalkOnlyWhenLightsOn = true;
 
+    // ─────────────────────────────────────────────
+    //  LYD
+    // ─────────────────────────────────────────────
     [Header("Lyd")]
     public AudioSource footstepSource;
     public AudioClip footstepLoop;
@@ -35,23 +76,29 @@ public class SchizoEnemy : MonoBehaviour
     public AudioClip appearSound;
     public AudioClip dismissSound;
 
-    // ── Private state ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  PRIVATE STATE
+    // ─────────────────────────────────────────────
     private SchizoState _state = SchizoState.Inactive;
     private NavMeshAgent _agent;
     private Renderer[] _renderers;
     private float _lastStalkTime = -999f;
     private bool _lightsOn = true;
     private bool _playerIsHiding;
-
-    // Retningen fodtrinene kommer fra (bag spilleren) — bruges til look-back tjek
     private Vector3 _stalkSourceDirection;
+    private int _currentPoseIndex = -1;
 
-    // ── Init ──────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  INIT
+    // ─────────────────────────────────────────────
     void Start()
     {
         _agent = GetComponent<NavMeshAgent>();
         _agent.enabled = false;
         _renderers = GetComponentsInChildren<Renderer>();
+
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
 
         if (playerTransform == null)
         {
@@ -62,6 +109,7 @@ public class SchizoEnemy : MonoBehaviour
             playerCamera = Camera.main;
 
         SetVisible(false);
+        DeactivateAllPoseObjects();
 
         if (WarehouseLightController.Instance != null)
         {
@@ -79,6 +127,8 @@ public class SchizoEnemy : MonoBehaviour
         yield return null;
         if (HidingManager.Instance != null)
             HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
+        else
+            Debug.LogWarning("[SchizoEnemy] HidingManager ikke fundet!");
     }
 
     void OnDestroy()
@@ -92,21 +142,25 @@ public class SchizoEnemy : MonoBehaviour
             HidingManager.Instance.OnPlayerHidingChanged -= OnPlayerHidingChanged;
     }
 
-    // ── Lys-events ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  LYS-EVENTS
+    // ─────────────────────────────────────────────
     public void OnLightOff() => _lightsOn = false;
     public void OnLightOn() => _lightsOn = true;
 
-    // ── Hiding-event ──────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  HIDING-EVENT
+    // ─────────────────────────────────────────────
     void OnPlayerHidingChanged(bool hiding)
     {
         _playerIsHiding = hiding;
-
-        // Afbryd stalking med det samme hvis spilleren gemmer sig
         if (hiding && _state == SchizoState.Stalking)
             StopFootsteps();
     }
 
-    // ── Haunting cyklus ───────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  HAUNTING CYKLUS
+    // ─────────────────────────────────────────────
     IEnumerator HauntingCycle()
     {
         while (true)
@@ -128,7 +182,9 @@ public class SchizoEnemy : MonoBehaviour
         }
     }
 
-    // ── Haunting ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  HAUNTING
+    // ─────────────────────────────────────────────
     IEnumerator DoHaunting()
     {
         _state = SchizoState.Haunting;
@@ -137,9 +193,14 @@ public class SchizoEnemy : MonoBehaviour
         if (spawnPos == Vector3.zero) { _state = SchizoState.Inactive; yield break; }
 
         transform.position = spawnPos;
+
         Vector3 lookDir = playerTransform.position - transform.position;
         lookDir.y = 0f;
-        if (lookDir != Vector3.zero) transform.rotation = Quaternion.LookRotation(lookDir);
+        if (lookDir != Vector3.zero)
+            transform.rotation = Quaternion.LookRotation(lookDir);
+
+        // Vælg tilfældig pose inden vi viser fjenden
+        ApplyRandomPose();
 
         SetVisible(true);
         PlaySFX(appearSound);
@@ -148,23 +209,30 @@ public class SchizoEnemy : MonoBehaviour
         while (elapsed < hauntVisibleDuration)
         {
             elapsed += Time.deltaTime;
-            if (IsPlayerLookingAtMe()) { SetVisible(false); _state = SchizoState.Inactive; yield break; }
+            if (IsPlayerLookingAtMe())
+            {
+                SetVisible(false);
+                DeactivateAllPoseObjects();
+                _state = SchizoState.Inactive;
+                yield break;
+            }
             yield return null;
         }
 
         SetVisible(false);
+        DeactivateAllPoseObjects();
         _state = SchizoState.Inactive;
     }
 
-    // ── Stalking ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  STALKING
+    // ─────────────────────────────────────────────
     IEnumerator DoStalking()
     {
         _state = SchizoState.Stalking;
         _lastStalkTime = Time.time;
         SetVisible(false);
 
-        // Gem retningen bag spilleren på det tidspunkt stalking starter
-        // Dette er den retning spilleren skal kigge imod for at afbryde
         _stalkSourceDirection = -playerTransform.forward;
 
         if (footstepSource != null && footstepLoop != null)
@@ -181,7 +249,6 @@ public class SchizoEnemy : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < stalkKillTime)
         {
-            // Afbryd hvis spilleren gemmmer sig
             if (_playerIsHiding) { yield return StartCoroutine(DismissStalking()); yield break; }
 
             elapsed += Time.deltaTime;
@@ -203,7 +270,6 @@ public class SchizoEnemy : MonoBehaviour
             yield return null;
         }
 
-        // Timer løb ud
         StopFootsteps();
         _state = SchizoState.Inactive;
         GameOverManager.Instance?.TriggerGameOver("Noget indhentede dig bagfra...");
@@ -217,23 +283,51 @@ public class SchizoEnemy : MonoBehaviour
         yield return new WaitForSeconds(0.4f);
     }
 
-    // ── Look-behind tjek ──────────────────────────────────────────
-    /// <summary>
-    /// Tjekker om kameraet kigger mod den retning fodtrinene kom fra.
-    /// Bruger kamera-forward direkte mod _stalkSourceDirection i world space
-    /// — fungerer uanset om kameraet er et child af spilleren.
-    /// </summary>
-    bool IsPlayerLookingTowardSource()
+    // ─────────────────────────────────────────────
+    //  POSE-SYSTEM
+    // ─────────────────────────────────────────────
+    void ApplyRandomPose()
     {
-        if (playerCamera == null) return false;
+        // Animator-path
+        if (animator != null && hauntPoses != null && hauntPoses.Length > 0)
+        {
+            int index = PickDifferentRandom(hauntPoses.Length, _currentPoseIndex);
+            _currentPoseIndex = index;
+            animator.Play(hauntPoses[index]);
+            return;
+        }
 
-        // _stalkSourceDirection er bag-retningen i world space fra da stalking startede
-        // Vi tjekker om kamera-forward er tilstrækkelig tæt på den retning
-        float angle = Vector3.Angle(playerCamera.transform.forward, _stalkSourceDirection);
-        return angle <= lookBackAngle;
+        // poseObjects-path
+        if (poseObjects != null && poseObjects.Length > 0)
+        {
+            int index = PickDifferentRandom(poseObjects.Length, _currentPoseIndex);
+            _currentPoseIndex = index;
+            for (int i = 0; i < poseObjects.Length; i++)
+                if (poseObjects[i] != null)
+                    poseObjects[i].SetActive(i == index);
+        }
     }
 
-    // ── Hjælpemetoder ─────────────────────────────────────────────
+    void DeactivateAllPoseObjects()
+    {
+        if (poseObjects == null) return;
+        foreach (var obj in poseObjects)
+            if (obj != null) obj.SetActive(false);
+    }
+
+    int PickDifferentRandom(int count, int previousIndex)
+    {
+        if (count <= 1) return 0;
+        int index;
+        int attempts = 0;
+        do { index = Random.Range(0, count); attempts++; }
+        while (index == previousIndex && attempts < 10);
+        return index;
+    }
+
+    // ─────────────────────────────────────────────
+    //  HJÆLPEMETODER
+    // ─────────────────────────────────────────────
     Vector3 FindSpawnPosition()
     {
         for (int attempt = 0; attempt < 25; attempt++)
@@ -244,12 +338,11 @@ public class SchizoEnemy : MonoBehaviour
             dir.Normalize();
 
             Vector3 candidate = playerTransform.position + dir * dist;
-
             if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 2f, NavMesh.AllAreas))
             {
                 Vector3 dirToCandidate = (hit.position - playerCamera.transform.position).normalized;
-                float angle = Vector3.Angle(playerCamera.transform.forward, dirToCandidate);
-                if (angle > 40f) return hit.position;
+                if (Vector3.Angle(playerCamera.transform.forward, dirToCandidate) > 40f)
+                    return hit.position;
             }
         }
         return Vector3.zero;
@@ -262,11 +355,16 @@ public class SchizoEnemy : MonoBehaviour
         return Vector3.Angle(playerCamera.transform.forward, dirToMe) <= hauntDetectAngle;
     }
 
+    bool IsPlayerLookingTowardSource()
+    {
+        if (playerCamera == null) return false;
+        return Vector3.Angle(playerCamera.transform.forward, _stalkSourceDirection) <= lookBackAngle;
+    }
+
     void UpdateFootstepPosition(float distanceFactor)
     {
         if (footstepSource == null || playerTransform == null) return;
         float dist = Mathf.Lerp(0.5f, 7f, distanceFactor);
-        // Placer lyden i _stalkSourceDirection fra spilleren — ikke altid direkte bag
         Vector3 pos = playerTransform.position + _stalkSourceDirection.normalized * dist;
         pos.y = playerTransform.position.y + 0.5f;
         footstepSource.transform.position = pos;

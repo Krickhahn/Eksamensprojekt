@@ -132,7 +132,10 @@ public class CardboardBox : MonoBehaviour
 
         if (playerHUD != null) playerHUD.SetActive(false);
 
-        HidingManager.Instance?.SetPlayerHiding(true);
+        if (HidingManager.Instance != null)
+            HidingManager.Instance.SetPlayerHiding(true);
+        else
+            Debug.LogError("[CardboardBox] HidingManager.Instance er NULL! Tilføj HidingManager til en GameManager i scenen.");
 
         Debug.Log("[CardboardBox] Spiller er gemt.");
     }
