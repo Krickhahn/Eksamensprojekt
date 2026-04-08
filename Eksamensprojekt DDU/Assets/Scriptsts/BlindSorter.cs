@@ -88,7 +88,17 @@ public class BlindSorter : MonoBehaviour
 
         _agent.speed = patrolSpeed;
         _behaviourCoroutine = StartCoroutine(PatrolCoroutine());
+        StartCoroutine(RegisterHidingListener());
     }
+
+    IEnumerator RegisterHidingListener()
+    {
+        yield return null;
+        if (HidingManager.Instance != null)
+            HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
+    }
+
+    private bool _isDead;
 
     void OnDestroy()
     {
@@ -129,13 +139,33 @@ public class BlindSorter : MonoBehaviour
                 }
 
                 // Angreb
-                if (!_playerIsHiding && playerTransform != null &&
+                if (!_playerIsHiding && !_isDead && playerTransform != null &&
                     Vector3.Distance(transform.position, playerTransform.position) <= attackRange)
                 {
-                    GameOverManager.Instance?.TriggerGameOver("Den blinde pakkesorter fandt dig...");
+                    _isDead = true;
+                    Debug.Log("[BlindSorter] Angriber spilleren!");
+                    if (GameOverManager.Instance != null)
+                        GameOverManager.Instance.TriggerGameOver("Den blinde pakkesorter fandt dig...");
+                    else
+                        Debug.LogWarning("[BlindSorter] GameOverManager.Instance er null!");
                 }
                 break;
         }
+    }
+
+    // ── Backup angreb via collision ───────────────────────────────
+    // Sørg for at fjende-prefabben har en Collider med Is Trigger = true
+    void OnTriggerEnter(Collider other)
+    {
+        if (_isDead || _playerIsHiding || _state != SorterState.Chasing) return;
+        if (!other.CompareTag("Player")) return;
+
+        _isDead = true;
+        Debug.Log("[BlindSorter] Rammer spilleren via trigger!");
+        if (GameOverManager.Instance != null)
+            GameOverManager.Instance.TriggerGameOver("Den blinde pakkesorter fandt dig...");
+        else
+            Debug.LogWarning("[BlindSorter] GameOverManager.Instance er null!");
     }
 
     // ── Hørelses-logik ────────────────────────────────────────────

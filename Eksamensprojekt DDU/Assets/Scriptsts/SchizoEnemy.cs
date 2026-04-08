@@ -70,10 +70,15 @@ public class SchizoEnemy : MonoBehaviour
             _lightsOn = WarehouseLightController.Instance.IsPowerOn;
         }
 
+        StartCoroutine(RegisterHidingListener());
+        StartCoroutine(HauntingCycle());
+    }
+
+    IEnumerator RegisterHidingListener()
+    {
+        yield return null;
         if (HidingManager.Instance != null)
             HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
-
-        StartCoroutine(HauntingCycle());
     }
 
     void OnDestroy()
