@@ -14834,9 +14834,9 @@ MonoBehaviour:
   minTimeBetweenFailures: 30
   maxTimeBetweenFailures: 90
   initialDelay: 20
-  chanceOfAngel: 0.75
-  minActivationTime: 90
-  maxActivationTime: 240
+  chanceOfAngel: 1
+  minActivationTime: 1
+  maxActivationTime: 1
   powerSwitch: {fileID: 2048614035}
   onLightOff:
     m_PersistentCalls:
