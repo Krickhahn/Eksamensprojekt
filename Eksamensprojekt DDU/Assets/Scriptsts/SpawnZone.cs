@@ -18,6 +18,9 @@ using UnityEngine;
 public class SpawnZone : MonoBehaviour
 {
     [Header("Zone")]
+    [Tooltip("Navn på denne zone der vises på skannerens display, f.eks. 'Hylde A' eller 'Lastbil 2'.")]
+    public string zoneName = "Spawnzone";
+
     [Tooltip("Størrelsen på spawn-området i meter (x = bredde, z = dybde).")]
     public Vector3 zoneSize = new Vector3(4f, 0.01f, 4f);
 

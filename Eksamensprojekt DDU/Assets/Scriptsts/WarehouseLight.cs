@@ -9,12 +9,17 @@ using UnityEngine;
 /// Plays a constant hum tone, and randomly triggers flicker bursts
 /// with an accompanying crackle sound. All parameters are Inspector-tunable.
 ///
+/// Respects WarehouseLightController power state — flickering stops
+/// when power is cut and resumes only when power is restored.
+///
 /// Setup
 /// ──────
 /// 1. Attach this script to your root lamp GameObject.
 /// 2. Drag the child Spotlight into "Spotlight" and the child Point Light
 ///    into "Point Light" in the Inspector.
 /// 3. Assign your hum and flicker AudioClips.
+/// 4. Add this light's root GameObject to WarehouseLightController.warehouseLights
+///    so the controller can call OnPowerOff() / OnPowerOn().
 /// </summary>
 [RequireComponent(typeof(AudioSource))]
 public class WarehouseLight : MonoBehaviour
@@ -94,6 +99,10 @@ public class WarehouseLight : MonoBehaviour
 
     private bool _isFlickering;
 
+    // Tracks whether the controller has cut power to this light.
+    // When false, flickering is suppressed and lights stay off.
+    private bool _isPowered = true;
+
     // ─────────────────────────────────────────────────────────────
     //  Unity lifecycle
     // ─────────────────────────────────────────────────────────────
@@ -161,6 +170,9 @@ public class WarehouseLight : MonoBehaviour
     /// <summary>Restores both lights to their full base intensities.</summary>
     private void RestoreLights() => SetLightIntensities(1f);
 
+    /// <summary>Cuts both lights to zero.</summary>
+    private void KillLights() => SetLightIntensities(0f);
+
     // ─────────────────────────────────────────────────────────────
     //  Coroutines
     // ─────────────────────────────────────────────────────────────
@@ -172,6 +184,9 @@ public class WarehouseLight : MonoBehaviour
         {
             float wait = Random.Range(minTimeBetweenFlickers, maxTimeBetweenFlickers);
             yield return new WaitForSeconds(wait);
+
+            // Don't flicker while power is off.
+            if (!_isPowered) continue;
 
             if (!_isFlickering)
                 yield return StartCoroutine(DoFlicker());
@@ -198,28 +213,81 @@ public class WarehouseLight : MonoBehaviour
 
         for (int i = 0; i < blinks; i++)
         {
+            // Abort mid-flicker if power was cut by the controller.
+            if (!_isPowered)
+            {
+                KillLights();
+                _isFlickering = false;
+                yield break;
+            }
+
             // Dim / cut out.
             SetLightIntensities(minIntensityMultiplier);
             yield return new WaitForSeconds(Random.Range(minBlinkDuration, maxBlinkDuration));
+
+            // Abort again after the dim wait — power may have gone during it.
+            if (!_isPowered)
+            {
+                KillLights();
+                _isFlickering = false;
+                yield break;
+            }
 
             // Restore.
             RestoreLights();
             yield return new WaitForSeconds(Random.Range(minBlinkDuration, maxBlinkDuration));
         }
 
-        // Always finish at full brightness.
-        RestoreLights();
+        // Always finish at full brightness (unless power was cut).
+        if (_isPowered)
+            RestoreLights();
+        else
+            KillLights();
+
         _isFlickering = false;
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Public API
+    //  Public API — Power control (called by WarehouseLightController)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called by WarehouseLightController when power is cut.
+    /// Stops any active flicker and kills the lights immediately.
+    /// The controller's own fade handles the smooth dim-out, so we
+    /// simply flag ourselves as unpowered here.
+    /// </summary>
+    public void OnPowerOff()
+    {
+        _isPowered = false;
+        _humSource.Stop();
+        // The controller fades lights itself; we just make sure
+        // a finishing flicker can't override that to full brightness.
+    }
+
+    /// <summary>
+    /// Called by WarehouseLightController when power is restored.
+    /// Re-enables flickering and restarts the hum.
+    /// </summary>
+    public void OnPowerOn()
+    {
+        _isPowered = true;
+
+        if (humClip != null && !_humSource.isPlaying)
+            _humSource.Play();
+
+        // The controller fades lights back up itself; flickering will
+        // resume naturally on the next FlickerScheduler interval.
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Public API — Manual control
     // ─────────────────────────────────────────────────────────────
 
     /// <summary>Manually triggers a flicker event (e.g. from a UnityEvent or another script).</summary>
     public void TriggerFlicker()
     {
-        if (!_isFlickering)
+        if (_isPowered && !_isFlickering)
             StartCoroutine(DoFlicker());
     }
 

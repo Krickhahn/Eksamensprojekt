@@ -6,8 +6,10 @@
 ///
 /// OPSÆTNING:
 ///   1. Tilføj dette script til stikkontaktens GameObject med en Collider.
-///   2. Juster cooldownDuration — anbefalet 20-40 sekunder.
-///   3. Tilslut evt. to materialer til switchRenderer for visuel feedback.
+///   2. Træk håndtaget ind i "switchHandle" — det roterer ned ved strømsvigt, op ved aktivering.
+///   3. Træk det røde lys-objekt ind i "redLight" og det grønne i "greenLight".
+///   4. Juster cooldownDuration — anbefalet 20-40 sekunder.
+///   5. Juster handleDownAngle og handleUpAngle til at passe til dit model.
 /// </summary>
 public class AngelPowerSwitch : MonoBehaviour
 {
@@ -22,15 +24,25 @@ public class AngelPowerSwitch : MonoBehaviour
     [Tooltip("Sekunder spilleren skal overleve inden kontakten kan aktiveres (20-40 anbefalet).")]
     public float cooldownDuration = 30f;
 
-    [Header("Visuel feedback (valgfrit)")]
-    [Tooltip("Renderer der skifter materiale baseret på tilstand.")]
-    public Renderer switchRenderer;
+    [Header("Håndtag")]
+    [Tooltip("Transform på håndtaget der roterer op/ned.")]
+    public Transform switchHandle;
 
-    [Tooltip("Materiale når kontakten ikke er klar endnu.")]
-    public Material notReadyMaterial;
+    [Tooltip("Lokal X-rotation (grader) når lyset er slukket — håndtag nede.")]
+    public float handleDownAngle = -40f;
 
-    [Tooltip("Materiale når kontakten er klar til aktivering.")]
-    public Material readyMaterial;
+    [Tooltip("Lokal X-rotation (grader) når lyset er tændt — håndtag oppe.")]
+    public float handleUpAngle = 40f;
+
+    [Tooltip("Tid i sekunder håndtaget bruger på at rotere.")]
+    public float handleAnimDuration = 0.3f;
+
+    [Header("Indikatorlys")]
+    [Tooltip("GameObject for det røde lys — vises når strømmen er slukket.")]
+    public GameObject redLight;
+
+    [Tooltip("GameObject for det grønne lys — vises når strømmen er tændt.")]
+    public GameObject greenLight;
 
     [Header("Lyd (valgfrit)")]
     public AudioClip notReadySound;
@@ -43,6 +55,12 @@ public class AngelPowerSwitch : MonoBehaviour
     private float _cooldownTimer = 0f;
     private Camera _cam;
 
+    // Handle animation
+    private bool _isAnimating = false;
+    private float _animElapsed = 0f;
+    private float _animFromAngle;
+    private float _animToAngle;
+
     public float CooldownProgress => _isAvailable
         ? Mathf.Clamp01(_cooldownTimer / cooldownDuration)
         : 0f;
@@ -50,11 +68,26 @@ public class AngelPowerSwitch : MonoBehaviour
     void Start()
     {
         _cam = Camera.main;
-        UpdateVisual();
+
+        // Start i tændt tilstand — håndtag oppe, grønt lys
+        SetHandleAngleImmediate(handleUpAngle);
+        SetLightIndicators(isPowered: true);
     }
 
     void Update()
     {
+        // Handle rotation animation
+        if (_isAnimating)
+        {
+            _animElapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(_animElapsed / handleAnimDuration);
+            float easedT = t * t * (3f - 2f * t); // smoothstep
+            SetHandleAngleImmediate(Mathf.Lerp(_animFromAngle, _animToAngle, easedT));
+
+            if (t >= 1f)
+                _isAnimating = false;
+        }
+
         if (!_isAvailable) return;
 
         if (!_isReady)
@@ -63,7 +96,6 @@ public class AngelPowerSwitch : MonoBehaviour
             if (_cooldownTimer >= cooldownDuration)
             {
                 _isReady = true;
-                UpdateVisual();
                 Debug.Log("[PowerSwitch] Klar til aktivering!");
             }
         }
@@ -81,24 +113,70 @@ public class AngelPowerSwitch : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Kaldes af WarehouseLightController når strømmen går.
+    /// Roterer håndtaget ned og tænder det røde lys.
+    /// </summary>
     public void SetSwitchAvailable(bool available)
     {
         _isAvailable = available;
         _isReady = false;
         _cooldownTimer = 0f;
-        UpdateVisual();
+
         if (available)
+        {
+            // Strøm slukket — håndtag ned, rødt lys
+            AnimateHandle(handleDownAngle);
+            SetLightIndicators(isPowered: false);
             Debug.Log($"[PowerSwitch] Aktiveret — klar om {cooldownDuration} sek.");
+        }
+        else
+        {
+            // Strøm tændt — håndtag op, grønt lys
+            AnimateHandle(handleUpAngle);
+            SetLightIndicators(isPowered: true);
+        }
     }
 
     void Activate()
     {
         _isAvailable = false;
-        UpdateVisual();
         PlaySound(activateSound);
         Debug.Log("[PowerSwitch] Aktiveret! Gendanner strøm.");
         WarehouseLightController.Instance?.RestorePower();
+        // Handle og lys opdateres via SetSwitchAvailable(false) kaldt af controlleren
     }
+
+    // ── Håndtag ───────────────────────────────────────────────────
+
+    void AnimateHandle(float targetAngle)
+    {
+        if (switchHandle == null) return;
+        _animFromAngle = switchHandle.localEulerAngles.x;
+        // Konverter fra Unity's 0-360 til -180..180 så lerp går den korte vej
+        if (_animFromAngle > 180f) _animFromAngle -= 360f;
+        _animToAngle = targetAngle;
+        _animElapsed = 0f;
+        _isAnimating = true;
+    }
+
+    void SetHandleAngleImmediate(float angle)
+    {
+        if (switchHandle == null) return;
+        Vector3 e = switchHandle.localEulerAngles;
+        e.x = angle;
+        switchHandle.localEulerAngles = e;
+    }
+
+    // ── Indikatorlys ──────────────────────────────────────────────
+
+    void SetLightIndicators(bool isPowered)
+    {
+        if (redLight != null) redLight.SetActive(!isPowered);
+        if (greenLight != null) greenLight.SetActive(isPowered);
+    }
+
+    // ── Hjælpefunktioner ──────────────────────────────────────────
 
     bool IsPlayerNearby()
     {
@@ -107,15 +185,6 @@ public class AngelPowerSwitch : MonoBehaviour
         if (dist > interactRange) return false;
         Vector3 dir = (transform.position - _cam.transform.position).normalized;
         return Vector3.Angle(_cam.transform.forward, dir) < 60f;
-    }
-
-    void UpdateVisual()
-    {
-        if (switchRenderer == null) return;
-        if (_isReady && readyMaterial != null)
-            switchRenderer.material = readyMaterial;
-        else if (!_isReady && notReadyMaterial != null)
-            switchRenderer.material = notReadyMaterial;
     }
 
     void PlaySound(AudioClip clip)

@@ -18,6 +18,9 @@ using UnityEngine.Events;
 ///   2. Træk ALLE lys-objekter i varehuset ind i warehouseLights.
 ///   3. Træk AngelPowerSwitch ind i powerSwitch.
 ///   4. WeepingAngelEnemy findes automatisk i scenen.
+///
+/// VIGTIGT: Hvis dine lys-objekter har WarehouseLight-scriptet på sig,
+/// finder denne controller dem automatisk og kalder OnPowerOff/OnPowerOn.
 /// </summary>
 public class WarehouseLightController : MonoBehaviour
 {
@@ -66,6 +69,9 @@ public class WarehouseLightController : MonoBehaviour
     private float _angelActivationTime = -1f; // -1 = aktiverer ikke dette spil
     private bool _angelActivated = false;
 
+    // WarehouseLight scripts discovered from the warehouseLights list.
+    private List<WarehouseLight> _warehouseLightScripts = new List<WarehouseLight>();
+
     public bool IsPowerOn => _isPowerOn;
 
     // ──────────────────────────────────────────────────────────────
@@ -82,9 +88,23 @@ public class WarehouseLightController : MonoBehaviour
         if (_angel == null)
             Debug.LogWarning("[LightController] Ingen WeepingAngelEnemy fundet i scenen.");
 
-        // Gem original lysstyrke
+        // Gem original lysstyrke og find WarehouseLight scripts
         foreach (Light l in warehouseLights)
+        {
             _originalIntensities.Add(l != null ? l.intensity : 1f);
+
+            // A WarehouseLight script sits on the same GameObject as its
+            // child Light, or on a parent — search up from the Light itself.
+            if (l != null)
+            {
+                WarehouseLight wl = l.GetComponentInParent<WarehouseLight>();
+                if (wl != null && !_warehouseLightScripts.Contains(wl))
+                    _warehouseLightScripts.Add(wl);
+            }
+        }
+
+        if (_warehouseLightScripts.Count > 0)
+            Debug.Log($"[LightController] Fandt {_warehouseLightScripts.Count} WarehouseLight script(s).");
 
         powerSwitch?.SetSwitchAvailable(false);
 
@@ -138,6 +158,11 @@ public class WarehouseLightController : MonoBehaviour
         bool activateAngel = _angelActivated && _angel != null;
         Debug.Log($"[LightController] Strømsvigt! Engel aktiveres: {activateAngel}");
 
+        // Notify all WarehouseLight scripts immediately so they stop flickering
+        // before the fade begins — prevents a flicker restore fighting the fade.
+        foreach (WarehouseLight wl in _warehouseLightScripts)
+            wl.OnPowerOff();
+
         StartCoroutine(FadeAllLights(0f, fadeOutDuration, () =>
         {
             if (activateAngel)
@@ -167,6 +192,11 @@ public class WarehouseLightController : MonoBehaviour
 
         StartCoroutine(FadeAllLights(1f, fadeInDuration, () =>
         {
+            // Notify WarehouseLight scripts that power is back
+            // after the fade-in completes so flickering resumes at full brightness.
+            foreach (WarehouseLight wl in _warehouseLightScripts)
+                wl.OnPowerOn();
+
             onLightOn?.Invoke();
         }));
     }

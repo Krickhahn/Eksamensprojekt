@@ -119,10 +119,18 @@ public class OrderManager : MonoBehaviour
         return orders.Find(o => o.targetPackage == pkg);
     }
 
-    public void RegisterPackage(Scannable pkg)
+    // Maps Scannable → spawnZoneName set af PackageSpawner
+    private System.Collections.Generic.Dictionary<Scannable, string> _packageZoneNames
+        = new System.Collections.Generic.Dictionary<Scannable, string>();
+
+    public void RegisterPackage(Scannable pkg, string spawnZoneName = "")
     {
-        if (pkg != null && !allPackages.Contains(pkg))
+        if (pkg == null) return;
+        if (!allPackages.Contains(pkg))
             allPackages.Add(pkg);
+
+        if (!string.IsNullOrEmpty(spawnZoneName))
+            _packageZoneNames[pkg] = spawnZoneName;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -204,6 +212,8 @@ public class OrderManager : MonoBehaviour
 
         Debug.Log($"[OrderManager] Ordre: '{resolvedName}' ({pkg.itemID}) → {zone.zoneName}");
 
+        _packageZoneNames.TryGetValue(pkg, out string spawnZone);
+
         orders.Add(new Order
         {
             itemID = pkg.itemID,
@@ -211,6 +221,7 @@ public class OrderManager : MonoBehaviour
             deliveryZone = zone,
             basePoints = pkg.deliveryPoints,
             targetPackage = pkg,
+            spawnZoneName = spawnZone ?? "",
         });
     }
 

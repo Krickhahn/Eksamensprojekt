@@ -87,12 +87,18 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowNewOrder(Order order)
     {
-        // Vis varenummer, navn og resterende tid
-        string time = ShiftTimer.Instance != null ? $" [{ShiftTimer.Instance.GetTimeRemainingFormatted()}]" : "";
+        string time = ShiftTimer.Instance != null
+                        ? $" [{ShiftTimer.Instance.GetTimeRemainingFormatted()}]"
+                        : "";
+        string location = !string.IsNullOrEmpty(order.spawnZoneName)
+                        ? $"{order.spawnZoneName} >> "
+                        : "";
         Color col = ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Overtime ? colorWarning
-                       : ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Pressure ? colorWarning
-                       : colorNormal;
-        SetLoop($"{order.itemID} -- {order.itemName}{time}", col);
+                        : ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Pressure ? colorWarning
+                        : colorNormal;
+
+        // Format: "Hylde A >> PKG-001 -- Fragile Box [04:32]"
+        SetLoop($"{location}{order.itemID} -- {order.itemName}{time}", col);
     }
 
     public void ShowItemConfirmed(Order order)

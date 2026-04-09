@@ -19,6 +19,9 @@ public class Order
     /// <summary>Reference til den specifikke Scannable-instans — bruges til at matche præcis denne pakke og ingen andre.</summary>
     [System.NonSerialized] public Scannable targetPackage;
 
+    /// <summary>Navnet på den spawnzone pakken befinder sig i — vises på displayet.</summary>
+    [System.NonSerialized] public string spawnZoneName;
+
     // ── Runtime state ──────────────────────────────────────────────
     /// <summary>Sat til true når pakken er scannet og bekræftet korrekt.</summary>
     [System.NonSerialized] public bool itemConfirmed;

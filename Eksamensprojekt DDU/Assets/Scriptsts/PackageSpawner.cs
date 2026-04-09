@@ -96,7 +96,7 @@ public class PackageSpawner : MonoBehaviour
                 Vector3? slot = wz.zone.GetNextSlot(half.y);
                 if (slot.HasValue)
                 {
-                    PlacePackage(match, slot.Value, wz.zone.GetSlotRotation());
+                    PlacePackage(match, slot.Value, wz.zone.GetSlotRotation(), wz.zone.zoneName);
                     remainingPackages.Remove(match);
                     spawned++;
                     Debug.Log($"[PackageSpawner] Tvungen placering: '{match.name}' → {wz.zone.gameObject.name}");
@@ -121,7 +121,7 @@ public class PackageSpawner : MonoBehaviour
                 Vector3? slot = chosen.zone.GetNextSlot(halfExtents.y);
                 if (slot.HasValue)
                 {
-                    PlacePackage(prefab, slot.Value, chosen.zone.GetSlotRotation());
+                    PlacePackage(prefab, slot.Value, chosen.zone.GetSlotRotation(), chosen.zone.zoneName);
                     placed = true;
                     break;
                 }
@@ -143,13 +143,13 @@ public class PackageSpawner : MonoBehaviour
 
     // ──────────────────────────────────────────────────────────────
 
-    void PlacePackage(GameObject prefab, Vector3 position, Quaternion rotation)
+    void PlacePackage(GameObject prefab, Vector3 position, Quaternion rotation, string spawnZoneName = "")
     {
         GameObject spawned = Instantiate(prefab, position, rotation);
 
         Scannable scannable = spawned.GetComponentInChildren<Scannable>();
         if (scannable != null)
-            OrderManager.Instance?.RegisterPackage(scannable);
+            OrderManager.Instance?.RegisterPackage(scannable, spawnZoneName);
 
         PickupObject pickup = spawned.GetComponentInChildren<PickupObject>();
         if (pickup != null && scannerAnimator != null)

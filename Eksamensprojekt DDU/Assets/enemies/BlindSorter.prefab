@@ -163,6 +163,12 @@ MonoBehaviour:
   attackRange: 1.5
   patrolPoints:
   - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   patrolWaitTime: 2
   investigateDuration: 8
   investigateRadius: 4
