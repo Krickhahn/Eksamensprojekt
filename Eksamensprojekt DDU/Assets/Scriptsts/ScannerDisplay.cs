@@ -69,7 +69,7 @@ public class ScannerDisplay : MonoBehaviour
     void Awake()
     {
         _cam = Camera.main;
-        SetLoop("STAND BY", colorNormal);
+        SetLoop("GO TO OFFICE", colorNormal);
     }
 
     void Update()
@@ -133,7 +133,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowShiftEnded()
     {
-        SetLoop("SKIFTET ER SLUT", colorWarning);
+        SetLoop("SHIFT IS OVER", colorWarning);
     }
 
     public void ShowStandBy()
@@ -143,32 +143,32 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowGoToOffice()
     {
-        SetLoop("GA TIL KONTORET", colorNormal);
+        SetLoop("GO TO OFFICE", colorNormal);
     }
 
     public void ShowAllComplete()
     {
-        SetLoop("ALLE FERDIGE", colorSuccess);
+        SetLoop("ALL DONE", colorSuccess);
     }
 
     public void ShowWrongItem(string scannedID, string expectedID)
     {
-        PlayOnce($"FEJL: {scannedID} != {expectedID}", colorError);
+        PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
     }
 
     public void ShowWrongZone(DeliveryZone expectedZone)
     {
-        PlayOnce($"FEJL ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
+        PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
     }
 
     public void ShowPackageNotInZone(DeliveryZone zone)
     {
-        PlayOnce($"PLACER PAKKE: {zone?.zoneName ?? "?"}", colorWarning);
+        PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
     }
 
     public void ShowWrongPackageInZone(string expectedID)
     {
-        PlayOnce($"FORKERT PAKKE I ZONE: {expectedID}", colorError);
+        PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
     }
 
     public void ShowCustomMessage(string message, Color color)
@@ -178,7 +178,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowScanPackageFirst()
     {
-        PlayOnce("SCAN PAKKE FORST", colorWarning);
+        PlayOnce("SCAN PACKAGE FIRST", colorWarning);
     }
 
     // ── Scanning ──────────────────────────────────────────────────
@@ -224,10 +224,10 @@ public class ScannerDisplay : MonoBehaviour
         switch (result)
         {
             case ScanResult.AlreadyConfirmed:
-                PlayOnce("ALLEREDE SCANNET", colorNormal);
+                PlayOnce("ALREADY SCANNED", colorNormal);
                 break;
             case ScanResult.NoActiveOrder:
-                PlayOnce("INGEN ORDRE", colorNormal);
+                PlayOnce("NO ORDERS", colorNormal);
                 break;
         }
     }
