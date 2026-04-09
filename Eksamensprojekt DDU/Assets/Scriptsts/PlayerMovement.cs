@@ -116,6 +116,10 @@ public class PlayerMovement : MonoBehaviour
     private bool _isCrouching;
     private float _targetHeight;
 
+    // ── Map lock ──────────────────────────────────
+    /// <summary>True mens kortet er åbent – fryser bevægelse og kamera-look.</summary>
+    public bool IsMapLocked { get; private set; }
+
     // ── Hiding state ──────────────────────────────
     /// <summary>True mens spilleren er gemt i en papkasse.</summary>
     public bool IsHiding { get; private set; }
@@ -147,6 +151,9 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     void Update()
     {
+        // Kamera-look og bevægelse er begge låst når kortet er åbent
+        if (IsMapLocked) return;
+
         // Kamera-rotation er tilladt selv når spilleren er gemt
         HandleLook();
 
@@ -155,6 +162,25 @@ public class PlayerMovement : MonoBehaviour
         HandleCrouch();
         HandleMovement();
         if (enableHeadBob) HandleHeadBob();
+    }
+
+    // ─────────────────────────────────────────────
+    //  MAP LOCK API  ← kaldes af MapInspector
+    // ─────────────────────────────────────────────
+    /// <summary>
+    /// Låser eller frigiver spillerens bevægelse og kamera-look.
+    /// Kaldes af MapInspector når kortet åbnes/lukkes.
+    /// </summary>
+    public void SetMapLock(bool locked)
+    {
+        IsMapLocked = locked;
+
+        if (locked)
+        {
+            // Stop al bevægelse med det samme så spilleren ikke glider
+            _velocity = Vector3.zero;
+            _verticalVelocity = groundedGravity;
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -173,16 +199,13 @@ public class PlayerMovement : MonoBehaviour
 
         if (hiding)
         {
-            // Gem exit-retningen så HandleLook kan klemme rotationen
             _boxExitDirection = exitDirection == Vector3.zero
                 ? Vector3.forward
                 : new Vector3(exitDirection.x, 0f, exitDirection.z).normalized;
 
-            // Drej spillerens body til at se mod exit-retningen med det samme
             if (_boxExitDirection != Vector3.zero)
                 transform.rotation = Quaternion.LookRotation(_boxExitDirection);
 
-            // Nulstil bevægelse så spilleren ikke driver ud af kassen
             _velocity = Vector3.zero;
             _verticalVelocity = groundedGravity;
         }
@@ -203,12 +226,10 @@ public class PlayerMovement : MonoBehaviour
 
         if (IsHiding)
         {
-            // Beregn den vinkel spillerens body ville få efter rotation
             Quaternion nextRot = transform.rotation * Quaternion.Euler(0f, mouseX, 0f);
             Vector3 nextForward = nextRot * Vector3.forward;
-
-            // Tillad kun rotation hvis vi stadig er inden for boxLookAngleLimit
             float angle = Vector3.SignedAngle(_boxExitDirection, nextForward, Vector3.up);
+
             if (Mathf.Abs(angle) <= boxLookAngleLimit)
                 transform.Rotate(Vector3.up * mouseX);
         }
@@ -242,9 +263,7 @@ public class PlayerMovement : MonoBehaviour
 
         float newHeight = Mathf.Lerp(_cc.height, _targetHeight, Time.deltaTime * crouchTransitionSpeed);
         float oldHeight = _cc.height;
-
         _cc.height = newHeight;
-
         float centerOffset = (newHeight - oldHeight) / 2f;
         _cc.center += new Vector3(0f, centerOffset, 0f);
 
