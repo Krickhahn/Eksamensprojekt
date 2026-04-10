@@ -72,10 +72,11 @@ public class SpawnZone : MonoBehaviour
         {
             for (int col = 0; col < cols; col++)
             {
+                // Gem rene grid-positioner uden jitter — jitter tilføjes i GetNextSlot()
                 Vector3 local = new Vector3(
-                    startX + col * spacing.x + Random.Range(-jitter, jitter),
+                    startX + col * spacing.x,
                     0f,
-                    startZ + row * spacing.y + Random.Range(-jitter, jitter)
+                    startZ + row * spacing.y
                 );
 
                 _availableSlots.Add(local);
@@ -104,7 +105,14 @@ public class SpawnZone : MonoBehaviour
         Vector3 local = _availableSlots[0];
         _availableSlots.RemoveAt(0);
 
-        local.y = packageHalfHeight;
+        // Tilføj jitter her så det altid er friskt og ikke bagt ind i grid-dataen
+        local.x += Random.Range(-jitter, jitter);
+        local.z += Random.Range(-jitter, jitter);
+
+        // VIGTIGT: Addér packageHalfHeight til Y i stedet for at erstatte den.
+        // Den gamle kode havde "local.y = packageHalfHeight" hvilket ignorerede
+        // zonens egen Y-placering i world space og fik pakker til at falde ned.
+        local.y += packageHalfHeight;
 
         return transform.TransformPoint(local);
     }

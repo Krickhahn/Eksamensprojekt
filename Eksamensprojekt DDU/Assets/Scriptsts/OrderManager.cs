@@ -173,11 +173,19 @@ public class OrderManager : MonoBehaviour
 
             Scannable pkg = availablePackages[Random.Range(0, availablePackages.Count)];
 
-            // Find alle zoner der accepterer denne pakke
-            List<DeliveryZone> compatibleZones = availableZones.FindAll(z =>
-                string.IsNullOrEmpty(z.requiredItemID) ||
+            // Find alle zoner der accepterer denne pakke.
+            // Zones med et specifikt requiredItemID der matcher pakken
+            // foretrækkes altid frem for åbne zoner (tomt requiredItemID).
+            // Det forhindrer at containeren (åben zone) stjæler ordrer der
+            // hører til en specifik hylde.
+            List<DeliveryZone> specificZones = availableZones.FindAll(z =>
+                !string.IsNullOrEmpty(z.requiredItemID) &&
                 pkg.itemID.StartsWith(z.requiredItemID)
             );
+
+            List<DeliveryZone> compatibleZones = specificZones.Count > 0
+                ? specificZones
+                : availableZones.FindAll(z => string.IsNullOrEmpty(z.requiredItemID));
 
             if (compatibleZones.Count == 0)
             {

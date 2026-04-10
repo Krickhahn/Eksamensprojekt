@@ -187,13 +187,25 @@ public class PackageSpawner : MonoBehaviour
 
     Vector3 GetPrefabHalfExtents(GameObject prefab)
     {
+        // Objektet skal være aktivt for at bounds beregnes korrekt —
+        // et inaktivt objekt returnerer altid bounds (0,0,0) hvilket
+        // betyder pakken spawner med y=0 og synker ned i hylden.
         GameObject temp = Instantiate(prefab, Vector3.zero, Quaternion.identity);
-        temp.SetActive(false);
 
         Collider col = temp.GetComponentInChildren<Collider>();
-        Vector3 half = col != null
-            ? col.bounds.extents
-            : new Vector3(0.25f, 0.25f, 0.25f);
+
+        Vector3 half;
+        if (col != null)
+        {
+            half = col.bounds.extents;
+        }
+        else
+        {
+            Renderer rend = temp.GetComponentInChildren<Renderer>();
+            half = rend != null
+                ? rend.bounds.extents
+                : new Vector3(0.25f, 0.25f, 0.25f);
+        }
 
         Destroy(temp);
         return half;

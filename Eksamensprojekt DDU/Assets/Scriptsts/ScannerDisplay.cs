@@ -16,6 +16,12 @@ using TMPro;
 ///   4. Træk TMP_Text feltet ind i Display Text.
 ///   5. Træk dette script ind i OrderManager's Scanner UI felt.
 ///
+///   LYD:
+///   6. Tilføj en AudioSource-komponent til det samme GameObject som dette script.
+///      (Play On Awake: OFF, Loop: OFF)
+///   7. Opret en AudioClip (fx en kort bip) og træk den ind i Beep Clip-feltet.
+///      Justér Beep Volume efter smag.
+///
 /// DISPLAY OPFØRSEL:
 ///   Normal besked  → ruller fra højre mod venstre, gentager i loop
 ///   Fejlbesked     → ruller fra højre mod venstre én gang, stopper
@@ -59,16 +65,52 @@ public class ScannerDisplay : MonoBehaviour
     [Tooltip("ScannerLight-komponenten der flasher når skanneren bruges. Valgfrit.")]
     public ScannerLight scannerLight;
 
+    [Header("Lyd")]
+    [Tooltip("AudioClip der afspilles når skanneren bruges (bip-lyd). Kræver en AudioSource på dette GameObject.")]
+    public AudioClip beepClip;
+
+    [Tooltip("Lydstyrke for bip-lyden (0–1).")]
+    [Range(0f, 1f)]
+    public float beepVolume = 1f;
+
     // ── Private ────────────────────────────────────────────────────
     private Camera _cam;
+    private AudioSource _audio;
     private Coroutine _displayRoutine;
-    private string _loopMessage;      // den besked der kører i loop (ordreinfo)
+    private string _loopMessage;
     private Color _loopColor;
+
+    // Forhindrer ShowStandBy() i at overskrive "GO TO OFFICE" ved opstart.
+    // Sættes til true første gang en rigtig ordre vises.
+    private bool _orderHasBeenShown = false;
 
     // ──────────────────────────────────────────────────────────────
     void Awake()
     {
         _cam = Camera.main;
+
+        // Hent eller tilføj AudioSource automatisk
+        _audio = GetComponent<AudioSource>();
+        if (_audio == null)
+        {
+            _audio = gameObject.AddComponent<AudioSource>();
+            _audio.playOnAwake = false;
+            _audio.loop = false;
+            _audio.spatialBlend = 0f; // 2D lyd — ændres til 1f for 3D-lyd fra skanneren
+        }
+    }
+
+    void Start()
+    {
+        // Køres efter alle andre scripts' Awake() og Start() så "GO TO OFFICE"
+        // ikke overskrives af fx OrderManager.ShowStandBy() i dens Start().
+        StartCoroutine(InitDisplay());
+    }
+
+    IEnumerator InitDisplay()
+    {
+        // Vent én frame så alle andre Start()-kald er færdige
+        yield return null;
         SetLoop("GO TO OFFICE", colorNormal);
     }
 
@@ -76,6 +118,7 @@ public class ScannerDisplay : MonoBehaviour
     {
         if (Input.GetMouseButtonDown(0) && Cursor.lockState == CursorLockMode.Locked)
         {
+            PlayBeep();
             scannerLight?.Flash();
 
             if (!PickupObject.IsHoldingItem)
@@ -83,10 +126,21 @@ public class ScannerDisplay : MonoBehaviour
         }
     }
 
+    // ── Lyd ───────────────────────────────────────────────────────
+
+    /// <summary>Afspiller bip-lyden én gang. Kræver at beepClip er assignet.</summary>
+    void PlayBeep()
+    {
+        if (_audio == null || beepClip == null) return;
+        _audio.PlayOneShot(beepClip, beepVolume);
+    }
+
     // ── Offentlige metoder kaldt af OrderManager ───────────────────
 
     public void ShowNewOrder(Order order)
     {
+        _orderHasBeenShown = true;
+
         string time = ShiftTimer.Instance != null
                         ? $" [{ShiftTimer.Instance.GetTimeRemainingFormatted()}]"
                         : "";
@@ -94,16 +148,14 @@ public class ScannerDisplay : MonoBehaviour
                         ? $"{order.spawnZoneName} >> "
                         : "";
         Color col = ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Overtime ? colorWarning
-                        : ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Pressure ? colorWarning
-                        : colorNormal;
+                  : ShiftTimer.Instance?.Phase == ShiftTimer.ShiftPhase.Pressure ? colorWarning
+                  : colorNormal;
 
-        // Format: "Hylde A >> PKG-001 -- Fragile Box [04:32]"
         SetLoop($"{location}{order.itemID} -- {order.itemName}{time}", col);
     }
 
     public void ShowItemConfirmed(Order order)
     {
-        // Nu afsløres destinationen
         SetLoop(
             $"OK >> {order.deliveryZone?.zoneName ?? "?"}",
             colorSuccess
@@ -112,7 +164,6 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowOrderComplete(Order order, System.Action onFinished = null)
     {
-        // Ruller point-beskeden én gang — kalder onFinished når den er færdig
         StartDisplay(ScrollOnceThen(
             $"DONE +{order.earnedPoints}PT",
             colorSuccess,
@@ -131,55 +182,38 @@ public class ScannerDisplay : MonoBehaviour
         onFinished?.Invoke();
     }
 
-    public void ShowShiftEnded()
-    {
-        SetLoop("SHIFT IS OVER", colorWarning);
-    }
-
+    public void ShowShiftEnded() => SetLoop("SHIFT IS OVER", colorWarning);
     public void ShowStandBy()
     {
+        // Ignorér kald fra OrderManager.StartDelayed ved opstart —
+        // displayet skal vise "GO TO OFFICE" indtil første ordre ankommer.
+        if (!_orderHasBeenShown) return;
+
         SetLoop("STAND BY", colorNormal);
     }
-
     public void ShowGoToOffice()
     {
         SetLoop("GO TO OFFICE", colorNormal);
     }
-
-    public void ShowAllComplete()
-    {
-        SetLoop("ALL DONE", colorSuccess);
-    }
+    public void ShowAllComplete() => SetLoop("ALL DONE", colorSuccess);
 
     public void ShowWrongItem(string scannedID, string expectedID)
-    {
-        PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
-    }
+        => PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
 
     public void ShowWrongZone(DeliveryZone expectedZone)
-    {
-        PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
-    }
+        => PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
 
     public void ShowPackageNotInZone(DeliveryZone zone)
-    {
-        PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
-    }
+        => PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
 
     public void ShowWrongPackageInZone(string expectedID)
-    {
-        PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
-    }
+        => PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
 
     public void ShowCustomMessage(string message, Color color)
-    {
-        PlayOnce(message, color);
-    }
+        => PlayOnce(message, color);
 
     public void ShowScanPackageFirst()
-    {
-        PlayOnce("SCAN PACKAGE FIRST", colorWarning);
-    }
+        => PlayOnce("SCAN PACKAGE FIRST", colorWarning);
 
     // ── Scanning ──────────────────────────────────────────────────
 
@@ -187,7 +221,6 @@ public class ScannerDisplay : MonoBehaviour
     {
         if (_cam == null) return;
 
-        // Vis laser-stråle uanset om der rammes noget
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
 
         if (!Physics.Raycast(ray, out RaycastHit hit, scanRange, scanLayerMask))
@@ -196,7 +229,6 @@ public class ScannerDisplay : MonoBehaviour
             return;
         }
 
-        // Tjek om objektet er en OrderStation
         OrderStation station = hit.collider.GetComponentInParent<OrderStation>();
         if (station != null)
         {
@@ -204,7 +236,6 @@ public class ScannerDisplay : MonoBehaviour
             return;
         }
 
-        // Tjek om objektet har en ScanMessage
         ScanMessage scanMsg = hit.collider.GetComponentInParent<ScanMessage>();
         if (scanMsg != null)
         {
@@ -234,10 +265,6 @@ public class ScannerDisplay : MonoBehaviour
 
     // ── Intern display-logik ───────────────────────────────────────
 
-    /// <summary>
-    /// Sætter en besked der kører i uendeligt loop.
-    /// Afbryder evt. fejlbesked med det samme.
-    /// </summary>
     void SetLoop(string message, Color color)
     {
         _loopMessage = message;
@@ -245,10 +272,6 @@ public class ScannerDisplay : MonoBehaviour
         StartDisplay(ScrollLoop(message, color));
     }
 
-    /// <summary>
-    /// Spiller en besked én gang fra højre til venstre.
-    /// Når den er færdig genoptages loop-beskeden.
-    /// </summary>
     void PlayOnce(string message, Color color)
     {
         StartDisplay(ScrollOnce(message, color, thenResume: true));
@@ -264,9 +287,6 @@ public class ScannerDisplay : MonoBehaviour
 
     // ── Scroll-coroutines ──────────────────────────────────────────
 
-    /// <summary>
-    /// Ruller beskeden fra højre mod venstre, gentager i loop.
-    /// </summary>
     IEnumerator ScrollLoop(string message, Color color)
     {
         float delay = 1f / Mathf.Max(0.1f, scrollSpeed);
@@ -278,10 +298,6 @@ public class ScannerDisplay : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Ruller beskeden fra højre mod venstre én gang.
-    /// Hvis thenResume er true genoptages loop-beskeden bagefter.
-    /// </summary>
     IEnumerator ScrollOnce(string message, Color color, bool thenResume)
     {
         float delay = 1f / Mathf.Max(0.1f, scrollSpeed);
@@ -291,25 +307,15 @@ public class ScannerDisplay : MonoBehaviour
             StartDisplay(ScrollLoop(_loopMessage, _loopColor));
     }
 
-    /// <summary>
-    /// Kerne-scroll: ruller message ét tegn ad gangen fra højre mod venstre
-    /// gennem et vindue på displayWidth tegn.
-    ///
-    /// Teksten starter helt ude til højre (displayWidth spaces foran)
-    /// og forsvinder helt til venstre (displayWidth spaces bag efter).
-    /// Ingen tegn vises uden for displayets bredde.
-    /// </summary>
     IEnumerator ScrollAcross(string message, Color color, float delay)
     {
         if (displayText == null) yield break;
 
         displayText.color = color;
 
-        // Pad foran med leadingSpaces (eller displayWidth hvis 0) så teksten starter usynlig fra højre
         int leading = leadingSpaces > 0 ? leadingSpaces : displayWidth;
         string padded = new string(' ', leading) + message + new string(' ', displayWidth);
 
-        // Rul ét tegn ad gangen — vis altid præcis displayWidth tegn
         for (int i = 0; i <= padded.Length - displayWidth; i++)
         {
             displayText.text = padded.Substring(i, displayWidth);
