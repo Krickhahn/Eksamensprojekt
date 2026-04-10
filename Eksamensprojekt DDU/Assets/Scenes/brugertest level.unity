@@ -1902,7 +1902,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &278730315
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4017,10 +4017,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnManager
   enemies:
   - prefab: {fileID: 8756750660172228927, guid: 489ca16b194bef04bb82b539c180f3a7, type: 3}
-    weight: 2
+    weight: 1
     displayName: GrinderGhost
   - prefab: {fileID: 7856690982818571016, guid: dab235e1eb2cf1a4fb0f54b50781cb6c, type: 3}
-    weight: 1
+    weight: 2
     displayName: Hallucination
   spawnPoints:
   - {fileID: 1828479395}
@@ -4030,12 +4030,12 @@ MonoBehaviour:
   - {fileID: 331841342}
   - {fileID: 1361623780}
   - {fileID: 1310220942}
-  baseSpawnChance: 0.05
-  chancePerPackage: 0.03
-  chancePerMinute: 0.075
+  baseSpawnChance: 0.025
+  chancePerPackage: 0.02
+  chancePerMinute: 0.0125
   maxSpawnChance: 0.8
   spawnTickInterval: 15
-  maxActiveEnemies: 4
+  maxActiveEnemies: 3
   excludeStatueFromCount: 1
 --- !u!114 &565865236 stripped
 MonoBehaviour:
@@ -7022,7 +7022,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4821e31f922814c45a3a0b63d3b4718a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShiftTimer
-  shiftDuration: 360
+  shiftDuration: 600
   pressureThreshold: 0.6
   overtimeThreshold: 0.85
   normalMultiplier: 1
