@@ -161,6 +161,7 @@ MonoBehaviour:
   investigateSpeed: 2.5
   chaseSpeed: 6
   attackRange: 1.5
+  killDelay: 0.4
   patrolPoints:
   - {fileID: 0}
   - {fileID: 0}
@@ -173,6 +174,9 @@ MonoBehaviour:
   investigateDuration: 8
   investigateRadius: 4
   chasePersistence: 2
+  animator: {fileID: 0}
+  animParamSpeed: Speed
+  animParamAttack: Attack
   movementSource: {fileID: 0}
   patrolSound: {fileID: 0}
   alertSound: {fileID: 0}

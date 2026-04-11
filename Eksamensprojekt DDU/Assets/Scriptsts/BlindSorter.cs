@@ -28,7 +28,12 @@ public class BlindSorter : MonoBehaviour
     public float patrolSpeed = 1.8f;
     public float investigateSpeed = 2.5f;
     public float chaseSpeed = 6f;
-    public float attackRange = 1.2f;
+
+    [Header("Angreb")]
+    [Tooltip("Afstand hvorfra fjenden kan dræbe spilleren")]
+    public float attackRange = 1.5f;
+    [Tooltip("Sekunder fra angreb initieres til game over (giver tid til death-animation)")]
+    public float killDelay = 0.4f;
 
     [Header("Patrol")]
     [Tooltip("Patrol-waypoints. Lad stå tomme for tilfældig vandring.")]
@@ -45,6 +50,14 @@ public class BlindSorter : MonoBehaviour
     [Tooltip("Sekunder fjenden fortsætter jagten EFTER spilleren er blevet stille og ude af høreradius")]
     public float chasePersistence = 6f;
 
+    [Header("Animation")]
+    [Tooltip("Animator på fjende-modellen. Kan være null — animationer springes over.")]
+    public Animator animator;
+    [Tooltip("Animator parameter: bevægelseshastighed (Float), bruges til blend tree")]
+    public string animParamSpeed = "Speed";
+    [Tooltip("Animator parameter: angreb (Trigger)")]
+    public string animParamAttack = "Attack";
+
     [Header("Lyd")]
     public AudioSource movementSource;
     public AudioClip patrolSound;
@@ -59,12 +72,15 @@ public class BlindSorter : MonoBehaviour
 
     private float _hearingTimer;
     private float _chaseTimer;
-    private bool _playerHeardThisFrame; // sættes af CheckHearing, læses af Update
+    private bool _playerHeardThisFrame;
     private Vector3 _lastHeardPosition;
     private bool _playerIsHiding;
 
     private Coroutine _behaviourCoroutine;
     private int _patrolIndex;
+
+    // Sætter vi til true når vi har initieret et drab — forhindrer dobbelt-kald
+    private bool _killInitiated;
 
     public SorterState CurrentState => _state;
 
@@ -72,6 +88,9 @@ public class BlindSorter : MonoBehaviour
     void Start()
     {
         _agent = GetComponent<NavMeshAgent>();
+
+        // Sørg for stoppingDistance er 0 så agenten faktisk når spilleren
+        _agent.stoppingDistance = 0f;
 
         if (playerTransform == null)
         {
@@ -82,6 +101,9 @@ public class BlindSorter : MonoBehaviour
                 _playerMovement = p.GetComponent<PlayerMovement>();
             }
         }
+
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
 
         if (HidingManager.Instance != null)
             HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
@@ -98,8 +120,6 @@ public class BlindSorter : MonoBehaviour
             HidingManager.Instance.OnPlayerHidingChanged += OnPlayerHidingChanged;
     }
 
-    private bool _isDead;
-
     void OnDestroy()
     {
         if (HidingManager.Instance != null)
@@ -112,7 +132,7 @@ public class BlindSorter : MonoBehaviour
         _playerIsHiding = hiding;
 
         if (hiding && _state == SorterState.Chasing)
-            EnterInvestigate(_lastHeardPosition); // Stop jagten, undersøg sidst kendte position
+            EnterInvestigate(_lastHeardPosition);
     }
 
     // ── Update ────────────────────────────────────────────────────
@@ -127,10 +147,12 @@ public class BlindSorter : MonoBehaviour
             CheckHearing();
         }
 
+        // Opdater animator med NavMesh-hastighed (virker uanset state)
+        UpdateAnimator();
+
         switch (_state)
         {
             case SorterState.Chasing:
-                // Tæl kun ned når spilleren IKKE er indenfor høreradius denne frame
                 if (!_playerHeardThisFrame)
                 {
                     _chaseTimer -= Time.deltaTime;
@@ -138,45 +160,68 @@ public class BlindSorter : MonoBehaviour
                         EnterInvestigate(_lastHeardPosition);
                 }
 
-                // Angreb
-                if (!_playerIsHiding && !_isDead && playerTransform != null &&
-                    Vector3.Distance(transform.position, playerTransform.position) <= attackRange)
-                {
-                    _isDead = true;
-                    Debug.Log("[BlindSorter] Angriber spilleren!");
-                    if (GameOverManager.Instance != null)
-                        GameOverManager.Instance.TriggerGameOver("Den blinde pakkesorter fandt dig...");
-                    else
-                        Debug.LogWarning("[BlindSorter] GameOverManager.Instance er null!");
-                }
+                // Angrebstjek — køres hver frame under jagt
+                TryAttackPlayer();
                 break;
         }
     }
 
-    // ── Backup angreb via collision ───────────────────────────────
-    // Sørg for at fjende-prefabben har en Collider med Is Trigger = true
-    void OnTriggerEnter(Collider other)
+    // ── Angreb ────────────────────────────────────────────────────
+    void TryAttackPlayer()
     {
-        if (_isDead || _playerIsHiding || _state != SorterState.Chasing) return;
-        if (!other.CompareTag("Player")) return;
+        if (_killInitiated || _playerIsHiding || playerTransform == null) return;
 
-        _isDead = true;
-        Debug.Log("[BlindSorter] Rammer spilleren via trigger!");
+        float dist = Vector3.Distance(transform.position, playerTransform.position);
+        if (dist <= attackRange)
+        {
+            InitiateKill();
+        }
+    }
+
+    void InitiateKill()
+    {
+        if (_killInitiated) return;
+        _killInitiated = true;
+
+        Debug.Log("[BlindSorter] Angriber spilleren!");
+
+        // Stop agenten og spil angrebsanimation
+        _agent.isStopped = true;
+        PlaySFX(killSound);
+
+        if (animator != null && !string.IsNullOrEmpty(animParamAttack))
+            animator.SetTrigger(animParamAttack);
+
+        StartCoroutine(KillAfterDelay());
+    }
+
+    IEnumerator KillAfterDelay()
+    {
+        yield return new WaitForSeconds(killDelay);
+
         if (GameOverManager.Instance != null)
             GameOverManager.Instance.TriggerGameOver("Den blinde pakkesorter fandt dig...");
         else
             Debug.LogWarning("[BlindSorter] GameOverManager.Instance er null!");
     }
 
+    // ── Backup angreb via collision ───────────────────────────────
+    void OnTriggerEnter(Collider other)
+    {
+        if (_killInitiated || _playerIsHiding || _state != SorterState.Chasing) return;
+        if (!other.CompareTag("Player")) return;
+
+        Debug.Log("[BlindSorter] Rammer spilleren via trigger!");
+        InitiateKill();
+    }
+
     // ── Hørelses-logik ────────────────────────────────────────────
     void CheckHearing()
     {
-        // Ignorer lyd fra en gemt spiller
         if (_playerIsHiding || playerTransform == null) return;
 
         float playerSpeed = _playerMovement != null ? _playerMovement.GetCurrentSpeed() : 0f;
 
-        // Under crouchThreshold tæller vi spilleren som stille
         if (playerSpeed < crouchThreshold) return;
 
         float dist = Vector3.Distance(transform.position, playerTransform.position);
@@ -187,16 +232,15 @@ public class BlindSorter : MonoBehaviour
 
         if (dist > hearingRange) return;
 
-        // Spilleren hørt
         _playerHeardThisFrame = true;
         _lastHeardPosition = playerTransform.position;
 
         if (isSprinting)
-            EnterChase();                          // Sprint → straks jagt
+            EnterChase();
         else if (_state == SorterState.Chasing)
-            _chaseTimer = chasePersistence;        // Fortsat gang under jagt → nulstil timer
+            _chaseTimer = chasePersistence;
         else
-            EnterInvestigate(_lastHeardPosition);  // Normal gang → undersøg
+            EnterInvestigate(_lastHeardPosition);
     }
 
     /// <summary>
@@ -252,6 +296,16 @@ public class BlindSorter : MonoBehaviour
         _behaviourCoroutine = StartCoroutine(PatrolCoroutine());
     }
 
+    // ── Animator ─────────────────────────────────────────────────
+    void UpdateAnimator()
+    {
+        if (animator == null || string.IsNullOrEmpty(animParamSpeed)) return;
+
+        // Brug NavMesh-agentens faktiske hastighed — virker automatisk
+        float speed = _agent.velocity.magnitude;
+        animator.SetFloat(animParamSpeed, speed);
+    }
+
     // ── Coroutines ────────────────────────────────────────────────
     IEnumerator PatrolCoroutine()
     {
@@ -277,7 +331,7 @@ public class BlindSorter : MonoBehaviour
 
             float timeout = 15f;
             while (_state == SorterState.Patrolling &&
-                   (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance))
+                   (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance + 0.1f))
             {
                 timeout -= Time.deltaTime;
                 if (timeout <= 0f) break;
@@ -295,7 +349,7 @@ public class BlindSorter : MonoBehaviour
 
         float timeout = 10f;
         while (_state == SorterState.Investigating &&
-               (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance))
+               (_agent.pathPending || _agent.remainingDistance > _agent.stoppingDistance + 0.1f))
         {
             timeout -= Time.deltaTime;
             if (timeout <= 0f) break;
@@ -307,7 +361,7 @@ public class BlindSorter : MonoBehaviour
         {
             searchElapsed += Time.deltaTime;
 
-            if (!_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance)
+            if (!_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance + 0.1f)
             {
                 Vector3 rand = targetPos + Random.insideUnitSphere * investigateRadius;
                 rand.y = targetPos.y;
@@ -328,7 +382,8 @@ public class BlindSorter : MonoBehaviour
         {
             if (!_playerIsHiding)
                 _agent.SetDestination(playerTransform.position);
-            yield return new WaitForSeconds(0.1f);
+
+            yield return new WaitForSeconds(0.05f); // Hyppigere opdatering under jagt
         }
     }
 
