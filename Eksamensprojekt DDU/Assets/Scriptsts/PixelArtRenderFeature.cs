@@ -39,6 +39,39 @@ public class PixelArtRenderFeature : ScriptableRendererFeature
         CoreUtils.Destroy(_material);
     }
 
+    // ─── Prioritetslogik ───────────────────────────────────────────
+    // 1. Hvis et Volume med PixelArtVolumeComponent er aktivt, bruges det.
+    // 2. Ellers, hvis en ScenePixelConfig findes i scenen, bruges den.
+    // 3. Ellers falder vi tilbage på Renderer Feature settings.
+
+    static void ResolveEffectValues(Settings fallback, out float pixelSize, out float paletteStrength)
+    {
+        // 1. Forsøg Volume
+        var stack = VolumeManager.instance.stack;
+        if (stack != null)
+        {
+            var vol = stack.GetComponent<PixelArtVolumeComponent>();
+            if (vol != null && vol.IsActive())
+            {
+                pixelSize = vol.pixelSize.value;
+                paletteStrength = vol.paletteStrength.value;
+                return;
+            }
+        }
+
+        // 2. Forsøg ScenePixelConfig
+        if (ScenePixelConfig.Current != null)
+        {
+            pixelSize = ScenePixelConfig.Current.LivePixelSize;
+            paletteStrength = ScenePixelConfig.Current.LivePaletteStrength;
+            return;
+        }
+
+        // 3. Brug Renderer Feature settings som fallback
+        pixelSize = fallback.pixelSize;
+        paletteStrength = fallback.paletteStrength;
+    }
+
     // ─── Inner Pass ────────────────────────────────────────────────
     class PixelArtPass : ScriptableRenderPass
     {
@@ -68,8 +101,10 @@ public class PixelArtRenderFeature : ScriptableRendererFeature
 
             TextureHandle dest = renderGraph.CreateTexture(destDescriptor);
 
-            _mat.SetFloat(PixelSizeId, _settings.pixelSize);
-            _mat.SetFloat(PaletteStrengthId, _settings.paletteStrength);
+            // Resolver værdier fra Volume → ScenePixelConfig → Settings
+            ResolveEffectValues(_settings, out float pixelSize, out float paletteStrength);
+            _mat.SetFloat(PixelSizeId, pixelSize);
+            _mat.SetFloat(PaletteStrengthId, paletteStrength);
 
             RenderGraphUtils.BlitMaterialParameters para = new(source, dest, _mat, 0);
             renderGraph.AddBlitPass(para, "PixelArtBlit");

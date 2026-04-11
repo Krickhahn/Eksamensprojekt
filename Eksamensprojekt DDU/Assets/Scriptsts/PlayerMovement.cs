@@ -277,6 +277,13 @@ public class PlayerMovement : MonoBehaviour
             Vector3 origin = _cameraLocalOrigin;
             origin.y = targetCamY;
             _cameraLocalOrigin = Vector3.Lerp(_cameraLocalOrigin, origin, Time.deltaTime * crouchTransitionSpeed);
+
+            // Flyt kameraet direkte så det følger crouch-højden —
+            // uden dette bevæger kameraet sig kun via HandleHeadBob()
+            // og ingenting sker når spilleren står stille.
+            Vector3 camPos = cameraTransform.localPosition;
+            camPos.y = _cameraLocalOrigin.y;
+            cameraTransform.localPosition = camPos;
         }
     }
 

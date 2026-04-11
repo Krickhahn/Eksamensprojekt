@@ -142,7 +142,9 @@ public class PickupObject : MonoBehaviour
     {
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
 
-        if (Physics.Raycast(ray, out RaycastHit hit, pickupRange))
+        // QueryTriggerInteraction.Ignore springer trigger-collidere over (fx DeliveryZone)
+        // så raycastet ikke blokeres af en zone pakken ligger i.
+        if (Physics.Raycast(ray, out RaycastHit hit, pickupRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             if (hit.transform == transform || hit.transform.IsChildOf(transform))
                 Pickup();
