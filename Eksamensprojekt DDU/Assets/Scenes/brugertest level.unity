@@ -2884,7 +2884,7 @@ MonoBehaviour:
     m_Bits: 2303
   scannerLight: {fileID: 1562527740}
   beepClip: {fileID: 8300000, guid: 3fdab9b9836273b43a2fa1237452e570, type: 3}
-  beepVolume: 1
+  beepVolume: 0.1
 --- !u!108 &373617868 stripped
 Light:
   m_CorrespondingSourceObject: {fileID: 4856728994427479085, guid: 8fde57f8f3ec1464a954b59533ace09c, type: 3}
@@ -3277,7 +3277,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3016381644312678282, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
       propertyPath: raycastDistance
-      value: 1.3
+      value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3016381644312678282, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
+      propertyPath: groundLayers.m_Bits
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 3016381644312678282, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
       propertyPath: surfaces.Array.size
@@ -12238,6 +12242,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: BlindSorter
       objectReference: {fileID: 0}
+    - target: {fileID: 7408233910188750736, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -17514,7 +17522,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SmartDoor
   player: {fileID: 589697267}
   closedAngle: 180
-  swingAngle: 90
+  swingAngle: -90
   frontDetectionRange: 4
   frontFullOpenRange: 3
   backDetectionRange: 4
@@ -23457,7 +23465,7 @@ AudioSource:
   m_audioClip: {fileID: 0}
   m_Resource: {fileID: 8300000, guid: 14f60a77f2247844eaadbdd37463e7e5, type: 3}
   m_PlayOnAwake: 1
-  m_Volume: 0.5
+  m_Volume: 0.126
   m_Pitch: 1
   Loop: 0
   Mute: 0
@@ -23501,7 +23509,7 @@ AudioSource:
     m_Curve:
     - serializedVersion: 3
       time: 0
-      value: 0
+      value: 1
       inSlope: 0
       outSlope: 0
       tangentMode: 0
@@ -23973,7 +23981,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SmartDoor
   player: {fileID: 589697267}
   closedAngle: 0
-  swingAngle: 90
+  swingAngle: -90
   frontDetectionRange: 3.4
   frontFullOpenRange: 2.5
   backDetectionRange: 4
