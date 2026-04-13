@@ -3412,8 +3412,16 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1828949082}
     - target: {fileID: 9181331313202117762, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
+      propertyPath: stunDuration
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 9181331313202117762, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
       propertyPath: standingHeight
       value: 0.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 9181331313202117762, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
+      propertyPath: vignetteRecoverTime
+      value: 15
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4856,6 +4864,26 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: attackPause
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: chaseLinger
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: speedCrouch
+      value: 2.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: speedSprint
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: attackDuration
+      value: 4.84
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
       propertyPath: movementSource
       value: 
       objectReference: {fileID: 1320169864}
@@ -4864,8 +4892,24 @@ PrefabInstance:
       value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: postAttackWait
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: sprintThreshold
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: chasePersistence
+      value: 0.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: investigateToChaseTime
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4837939532604610444, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
       propertyPath: attackAnimationDuration
-      value: 2
+      value: 121
       objectReference: {fileID: 0}
     - target: {fileID: 6405590475243992293, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
       propertyPath: m_LocalPosition.x
@@ -4907,13 +4951,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6710013164214788242, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
+      propertyPath: m_AngularSpeed
+      value: 720
+      objectReference: {fileID: 0}
     - target: {fileID: 7408233910188750736, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
       propertyPath: m_Name
       value: BlindSorter
       objectReference: {fileID: 0}
     - target: {fileID: 7408233910188750736, guid: 64badce9485ac9047ae7655caf8f3319, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

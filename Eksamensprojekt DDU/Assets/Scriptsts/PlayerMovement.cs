@@ -112,6 +112,14 @@ public class PlayerMovement : MonoBehaviour
     [Tooltip("Sekunder den roede vignette fader ud igen efter foerste hit.")]
     public float vignetteRecoverTime = 5f;
 
+    [Header("Stun")]
+    [Tooltip("Sekunder spilleren er stunned og kan ikke bevæge sig efter et hit.")]
+    public float stunDuration = 1.2f;
+    [Tooltip("Styrken på kamera-rysten under stun.")]
+    public float shakeIntensity = 0.08f;
+    [Tooltip("Hastigheden på kamera-rysten.")]
+    public float shakeFrequency = 18f;
+
     // ─────────────────────────────────────────────
     //  HIDING LOOK CLAMP
     // ─────────────────────────────────────────────
@@ -135,10 +143,13 @@ public class PlayerMovement : MonoBehaviour
     public bool IsHiding { get; private set; }
     public bool IsDamaged { get; private set; }
     public bool IsDead { get; private set; }
+    public bool IsStunned { get; private set; }
 
     private Vector3 _boxExitDirection = Vector3.forward;
     private Vignette _vignette;
     private Coroutine _vignetteCoroutine;
+    private Coroutine _stunCoroutine;
+    private float _stunShakeTimer;
 
     // ─────────────────────────────────────────────
     //  INIT
@@ -167,6 +178,13 @@ public class PlayerMovement : MonoBehaviour
     void Update()
     {
         if (IsDead || IsMapLocked) return;
+
+        // Kamera-shake under stun — bevægelse og look er låst
+        if (IsStunned)
+        {
+            ApplyStunShake();
+            return;
+        }
 
         HandleLook();
 
@@ -222,7 +240,11 @@ public class PlayerMovement : MonoBehaviour
     /// </summary>
     public void TakeDamage()
     {
-        if (IsDead) return;
+        if (IsDead || IsStunned) return;
+
+        // Start stun — blokerer nyt skade og låser bevægelse
+        if (_stunCoroutine != null) StopCoroutine(_stunCoroutine);
+        _stunCoroutine = StartCoroutine(StunCoroutine());
 
         if (!IsDamaged)
         {
@@ -246,6 +268,41 @@ public class PlayerMovement : MonoBehaviour
 
         if (_vignetteCoroutine != null) StopCoroutine(_vignetteCoroutine);
         _vignetteCoroutine = StartCoroutine(DeathVignetteCoroutine());
+    }
+
+    // ─────────────────────────────────────────────
+    //  STUN
+    // ─────────────────────────────────────────────
+    IEnumerator StunCoroutine()
+    {
+        IsStunned = true;
+        _stunShakeTimer = 0f;
+
+        // Stop al bevægelse med det samme
+        _velocity = Vector3.zero;
+
+        yield return new WaitForSeconds(stunDuration);
+
+        IsStunned = false;
+
+        // Nulstil kameraets lokale position tilbage til origin
+        if (cameraTransform != null)
+        {
+            cameraTransform.localPosition = _cameraLocalOrigin;
+        }
+    }
+
+    void ApplyStunShake()
+    {
+        if (cameraTransform == null) return;
+
+        _stunShakeTimer += Time.deltaTime * shakeFrequency;
+
+        // Perlin noise giver en mere organisk rysten end simpel sinus
+        float offsetX = (Mathf.PerlinNoise(_stunShakeTimer, 0f) - 0.5f) * 2f * shakeIntensity;
+        float offsetY = (Mathf.PerlinNoise(0f, _stunShakeTimer) - 0.5f) * 2f * shakeIntensity;
+
+        cameraTransform.localPosition = _cameraLocalOrigin + new Vector3(offsetX, offsetY, 0f);
     }
 
     // ─────────────────────────────────────────────
