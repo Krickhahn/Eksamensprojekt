@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/buttonswork.uss?fileID=7433441132597879392&amp;guid=49f6467e63a951e4d831e5fbb1dc36a3&amp;type=3#buttonswork"/>
+    <Style src="project://database/Assets/3D%20assets/start%20scene/MenuButtons.uss?fileID=7433441132597879392&amp;guid=5ac4cb14fe7cde845900acb4bfc3967e&amp;type=3#MenuButtons"/>
+    <ui:VisualElement style="flex-grow: 1; width: 216px; height: 426px; align-content: flex-start; position: absolute; top: 297px; left: 140px;">
+        <ui:Button text="Button" name="Button" class="menu-btn" style="position: relative; top: 18px;"/>
+        <ui:Button text="Button" class="menu-btn" style="top: 83px;"/>
+        <ui:Button text="Button" class="menu-btn" style="top: 139px;"/>
+        <ui:Button text="Button" class="menu-btn" style="top: 198px;"/>
+    </ui:VisualElement>
+</ui:UXML>

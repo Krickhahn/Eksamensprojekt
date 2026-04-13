@@ -166,6 +166,22 @@ public class FolderInteractionController : MonoBehaviour
     private bool _isClicked = false;
     private bool _signatureComplete = false;
 
+    /// <summary>Set to true by MainMenuController when the player presses Start.</summary>
+    [HideInInspector]
+    public bool interactionEnabled
+    {
+        get => _interactionEnabled;
+        set
+        {
+            _interactionEnabled = value;
+            if (_collider != null) _collider.enabled = value;
+        }
+    }
+    private bool _interactionEnabled = false;
+
+    // Cache the collider so we can toggle it
+    private Collider _collider;
+
     private Material _folderMat;
     private static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
 
@@ -186,6 +202,10 @@ public class FolderInteractionController : MonoBehaviour
         }
 
         if (mainCamera == null) mainCamera = Camera.main;
+
+        // Disable collider until menu hands over control
+        _collider = GetComponent<Collider>();
+        if (_collider != null) _collider.enabled = false;
 
         if (newDocumentCanvas != null)
             DontDestroyOnLoad(newDocumentCanvas.gameObject);
@@ -220,7 +240,7 @@ public class FolderInteractionController : MonoBehaviour
 
     private void Update()
     {
-        if (_isClicked) return;
+        if (!interactionEnabled || _isClicked) return;
         HandleHoverGlow();
         HandleClick();
     }
@@ -238,7 +258,7 @@ public class FolderInteractionController : MonoBehaviour
 
     private void OnMouseEnter()
     {
-        if (_isClicked) return;
+        if (!interactionEnabled || _isClicked) return;
         _isHovered = true;
         if (soundHover != null && audioSource != null && !audioSource.isPlaying)
             audioSource.PlayOneShot(soundHover, hoverVolume);
@@ -246,7 +266,7 @@ public class FolderInteractionController : MonoBehaviour
 
     private void OnMouseExit()
     {
-        if (_isClicked) return;
+        if (!interactionEnabled || _isClicked) return;
         _isHovered = false;
     }
 

@@ -4,6 +4,11 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using TMPro;
 
+/// <summary>
+/// Main menu controller — pure uGUI version (no UI Toolkit).
+/// Wire all buttons in the Inspector via their OnClick() events.
+/// All handler methods are public so they appear in the Inspector dropdown.
+/// </summary>
 public class MainMenuController : MonoBehaviour
 {
     // ─────────────────────────────────────────────────────────────
@@ -18,7 +23,7 @@ public class MainMenuController : MonoBehaviour
     public Button quitButton;
 
     [Header("═══ Options Folder")]
-    [Tooltip("Place this in the editor at the position where it should be VISIBLE (to the right of main folder).")]
+    [Tooltip("Place at its visible position in the editor. Script calculates the hidden position.")]
     public RectTransform optionsFolder;
     public Button optionsBackButton;
     public Slider sensitivitySlider;
@@ -27,18 +32,26 @@ public class MainMenuController : MonoBehaviour
     [Range(0f, 1f)] public float defaultVolume = 1f;
 
     [Header("═══ Credits")]
-    [Tooltip("The CreditsOverlay root — must be on its own Canvas at a high sort order.")]
+    [Tooltip("Must be on its own Canvas at a high sort order (e.g. 50).")]
     public RectTransform creditsOverlay;
     public VideoPlayer creditsVideoPlayer;
     public RawImage creditsRawImage;
     public Button creditsBackButton;
 
-    [Header("═══ Input Blocker")]
-    [Tooltip("A full-screen transparent Image that sits over the game world to block folder clicks while menu is open. Put it on MainMenuCanvas, stretched full screen, alpha=0, Raycast Target ON.")]
-    public Image inputBlocker;
+    [Header("═══ Sounds")]
+    [Tooltip("AudioSource to play button sounds through. Auto-created if left null.")]
+    public AudioSource menuAudioSource;
+
+    [Tooltip("Sound that plays when any menu button is clicked.")]
+    public AudioClip buttonClickSound;
+
+    [Range(0f, 1f)] public float buttonClickVolume = 0.8f;
+
+    [Header("═══ Gameplay")]
+    [Tooltip("Drag the folder object's FolderInteractionController here.")]
+    public FolderInteractionController folderInteraction;
 
     [Header("═══ Animation")]
-    [Tooltip("How far the main folder slides left when Start is pressed (pixels).")]
     public float slideOutDistance = 900f;
     [Range(0.1f, 2f)] public float slideOutDuration = 0.6f;
     public AnimationCurve slideOutCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
@@ -57,8 +70,8 @@ public class MainMenuController : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
     private Vector2 _mainFolderStartPos;
-    private Vector2 _optionsFolderVisiblePos;   // where it sits when open  (set from editor position)
-    private Vector2 _optionsFolderHiddenPos;    // off to the LEFT, hidden
+    private Vector2 _optionsFolderVisiblePos;
+    private Vector2 _optionsFolderHiddenPos;
 
     private CanvasGroup _creditsCanvasGroup;
     private GraphicRaycaster _creditsRaycaster;
@@ -74,29 +87,19 @@ public class MainMenuController : MonoBehaviour
 
     private void Awake()
     {
-        // ── Main folder ──────────────────────────────────────────
         _mainFolderStartPos = mainFolder.anchoredPosition;
 
-        // ── Options folder ───────────────────────────────────────
-        // Visible pos = wherever you placed it in the editor (to the right of main folder)
-        // Hidden pos  = off to the LEFT by its own width + a gap
         _optionsFolderVisiblePos = optionsFolder.anchoredPosition;
         _optionsFolderHiddenPos = _optionsFolderVisiblePos - new Vector2(optionsFolder.rect.width + 60f, 0f);
         optionsFolder.anchoredPosition = _optionsFolderHiddenPos;
         optionsFolder.gameObject.SetActive(false);
 
-        // ── Credits overlay ──────────────────────────────────────
-        // CreditsOverlay lives on its OWN canvas — we control visibility
-        // via its CanvasGroup AND its GraphicRaycaster
         _creditsCanvasGroup = creditsOverlay.GetComponent<CanvasGroup>();
         if (_creditsCanvasGroup == null)
             _creditsCanvasGroup = creditsOverlay.gameObject.AddComponent<CanvasGroup>();
-
         _creditsRaycaster = creditsOverlay.GetComponentInParent<GraphicRaycaster>();
-
         SetCreditsVisible(false, instant: true);
 
-        // ── Video render texture ─────────────────────────────────
         if (creditsVideoPlayer != null && creditsRawImage != null)
         {
             _creditsRenderTex = new RenderTexture(1920, 1080, 0);
@@ -104,22 +107,19 @@ public class MainMenuController : MonoBehaviour
             creditsRawImage.texture = _creditsRenderTex;
         }
 
-        // ── Input blocker — active while menu is showing ─────────
-        if (inputBlocker != null)
-        {
-            inputBlocker.color = new Color(0, 0, 0, 0); // fully transparent
-            inputBlocker.raycastTarget = true;                   // eats all clicks
-            inputBlocker.gameObject.SetActive(true);
-        }
+        if (folderInteraction != null)
+            folderInteraction.interactionEnabled = false;
 
-        // ── Saved settings ───────────────────────────────────────
+        if (menuAudioSource == null)
+            menuAudioSource = gameObject.AddComponent<AudioSource>();
+        menuAudioSource.playOnAwake = false;
+
         float savedVol = PlayerPrefs.GetFloat("MasterVolume", defaultVolume);
         float savedSens = PlayerPrefs.GetFloat("MouseSensitivity", defaultSensitivity);
-
         if (volumeSlider != null) { volumeSlider.value = savedVol; AudioListener.volume = savedVol; }
         if (sensitivitySlider != null) { sensitivitySlider.value = savedSens; ApplySensitivity(savedSens); }
 
-        // ── Wire buttons ─────────────────────────────────────────
+        // Wire buttons via code as backup — also wire them in the Inspector
         startButton?.onClick.AddListener(OnStartPressed);
         optionsButton?.onClick.AddListener(OnOptionsPressed);
         creditsButton?.onClick.AddListener(OnCreditsPressed);
@@ -132,46 +132,58 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
-    // BUTTON HANDLERS
+    // BUTTON HANDLERS — public for Inspector wiring
     // ─────────────────────────────────────────────────────────────
 
-    private void OnStartPressed()
+    public void OnStartPressed()
     {
         if (_animating || !_menuActive) return;
+        PlayButtonClick();
         StartCoroutine(SlideOutAndStart());
     }
 
-    private void OnOptionsPressed()
+    public void OnOptionsPressed()
     {
         if (_animating) return;
+        PlayButtonClick();
         StartCoroutine(SlideOptionsIn());
     }
 
-    private void OnOptionsBack()
+    public void OnOptionsBack()
     {
         if (_animating) return;
+        PlayButtonClick();
         StartCoroutine(SlideOptionsOut());
     }
 
-    private void OnCreditsPressed()
+    public void OnCreditsPressed()
     {
         if (_animating) return;
+        PlayButtonClick();
         StartCoroutine(ShowCredits());
     }
 
-    private void OnCreditsBack()
+    public void OnCreditsBack()
     {
         if (_animating) return;
+        PlayButtonClick();
         StartCoroutine(HideCredits());
     }
 
-    private void OnQuitPressed()
+    public void OnQuitPressed()
     {
+        PlayButtonClick();
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
         Application.Quit();
 #endif
+    }
+
+    private void PlayButtonClick()
+    {
+        if (menuAudioSource != null && buttonClickSound != null)
+            menuAudioSource.PlayOneShot(buttonClickSound, buttonClickVolume);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -207,20 +219,17 @@ public class MainMenuController : MonoBehaviour
         _animating = true;
         _menuActive = false;
 
-        // Slide options out too if open
         if (optionsFolder.gameObject.activeSelf)
             yield return StartCoroutine(SlideOptionsOut());
 
-        // Slide main folder left off screen
         Vector2 startPos = mainFolder.anchoredPosition;
         Vector2 targetPos = startPos - new Vector2(slideOutDistance, 0f);
         yield return StartCoroutine(SlideRect(mainFolder, startPos, targetPos, slideOutDuration, slideOutCurve));
 
         mainFolder.gameObject.SetActive(false);
 
-        // Remove the input blocker — gameplay can now receive clicks
-        if (inputBlocker != null)
-            inputBlocker.gameObject.SetActive(false);
+        if (folderInteraction != null)
+            folderInteraction.interactionEnabled = true;
 
         _animating = false;
     }
@@ -265,33 +274,24 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
-    // CREDITS VISIBILITY HELPER
+    // CREDITS VISIBILITY
     // ─────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Controls whether the credits overlay is visible and interactive.
-    /// Handles both the CanvasGroup alpha AND the GraphicRaycaster on the
-    /// credits canvas so the back button is always hittable when shown.
-    /// </summary>
     private void SetCreditsVisible(bool visible, bool instant)
     {
         creditsOverlay.gameObject.SetActive(visible);
-
         if (_creditsCanvasGroup != null)
         {
             if (instant) _creditsCanvasGroup.alpha = visible ? 1f : 0f;
             _creditsCanvasGroup.interactable = visible;
             _creditsCanvasGroup.blocksRaycasts = visible;
         }
-
-        // Enable/disable the GraphicRaycaster on the credits canvas
-        // so the back button can actually receive pointer events
         if (_creditsRaycaster != null)
             _creditsRaycaster.enabled = visible;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ANIMATION HELPERS
+    // HELPERS
     // ─────────────────────────────────────────────────────────────
 
     private IEnumerator SlideRect(RectTransform rt, Vector2 from, Vector2 to,

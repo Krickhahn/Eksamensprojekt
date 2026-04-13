@@ -1,0 +1,64 @@
+:root {
+    --ink: rgb(42, 28, 14);
+    --paper: rgb(212, 168, 83);
+    --paper-dark: rgb(185, 142, 58);
+    --paper-hover: rgb(230, 190, 105);
+    --stamp-red: rgb(160, 40, 30);
+    --shadow: rgba(0, 0, 0, 0.35);
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0);
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding-left: 0;
+    padding-top: 0;
+}
+
+#button-container {
+    position: absolute;
+    left: 32px;
+    top: 120px;
+    width: 220px;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.menu-btn {
+    margin-bottom: 72px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    padding-left: 24px;
+    padding-right: 24px;
+    background-color: var(--paper);
+    border-color: var(--ink);
+    border-width: 2px;
+    border-radius: 3px;
+    -unity-font-style: bold;
+    font-size: 18px;
+    color: var(--ink);
+    letter-spacing: 3px;
+    -unity-text-align: middle-left;
+    cursor: link;
+    transition-duration: 0.12s;
+    transition-property: background-color, scale;
+    scale: 1;
+}
+
+.menu-btn:hover {
+    background-color: var(--paper-hover);
+    border-color: var(--stamp-red);
+    color: var(--stamp-red);
+    scale: 1.03;
+}
+
+.menu-btn:active {
+    background-color: var(--paper-dark);
+    scale: 0.97;
+}
+
+.menu-btn:focus {
+    border-color: var(--stamp-red);
+}
