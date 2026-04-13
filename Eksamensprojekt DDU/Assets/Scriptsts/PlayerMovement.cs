@@ -1,10 +1,8 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
-/// <summary>
-/// 3D Player Movement Controller
-/// Attach this to a GameObject with a CharacterController component.
-/// Adjust all parameters in the Inspector.
-/// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovement : MonoBehaviour
 {
@@ -60,7 +58,7 @@ public class PlayerMovement : MonoBehaviour
     //  WEIGHT / CARRY
     // ─────────────────────────────────────────────
     [Header("Carry Weight")]
-    [Tooltip("Den vægt (kg) hvor spilleren er fuldstændig bremset.")]
+    [Tooltip("Den vaegt (kg) hvor spilleren er fuldstaendig bremset.")]
     public float maxCarryWeight = 20f;
 
     [HideInInspector]
@@ -105,6 +103,23 @@ public class PlayerMovement : MonoBehaviour
     public float bobAmplitudeX = 0.025f;
 
     // ─────────────────────────────────────────────
+    //  SKADE OG HELBRED
+    // ─────────────────────────────────────────────
+    [Header("Skade og helbred")]
+    [Tooltip("Global Volume i scenen med en Vignette override.")]
+    public Volume globalVolume;
+
+    [Tooltip("Sekunder den roede vignette fader ud igen efter foerste hit.")]
+    public float vignetteRecoverTime = 5f;
+
+    // ─────────────────────────────────────────────
+    //  HIDING LOOK CLAMP
+    // ─────────────────────────────────────────────
+    [Header("Hiding Look Clamp")]
+    [Tooltip("Maksimal vinkel spilleren kan se til siden inde i kassen (grader).")]
+    public float boxLookAngleLimit = 40f;
+
+    // ─────────────────────────────────────────────
     //  PRIVATE STATE
     // ─────────────────────────────────────────────
     private CharacterController _cc;
@@ -116,20 +131,14 @@ public class PlayerMovement : MonoBehaviour
     private bool _isCrouching;
     private float _targetHeight;
 
-    // ── Map lock ──────────────────────────────────
-    /// <summary>True mens kortet er åbent – fryser bevægelse og kamera-look.</summary>
     public bool IsMapLocked { get; private set; }
-
-    // ── Hiding state ──────────────────────────────
-    /// <summary>True mens spilleren er gemt i en papkasse.</summary>
     public bool IsHiding { get; private set; }
+    public bool IsDamaged { get; private set; }
+    public bool IsDead { get; private set; }
 
-    [Header("Hiding Look Clamp")]
-    [Tooltip("Maksimal vinkel spilleren kan se til siden inde i kassen (grader).")]
-    public float boxLookAngleLimit = 40f;
-
-    // Retning spilleren kigger ud af kassen (world space XZ), sat af CardboardBox
     private Vector3 _boxExitDirection = Vector3.forward;
+    private Vignette _vignette;
+    private Coroutine _vignetteCoroutine;
 
     // ─────────────────────────────────────────────
     //  INIT
@@ -144,6 +153,12 @@ public class PlayerMovement : MonoBehaviour
 
         if (cameraTransform != null)
             _cameraLocalOrigin = cameraTransform.localPosition;
+
+        if (globalVolume != null && globalVolume.profile.TryGet(out Vignette v))
+        {
+            _vignette = v;
+            _vignette.intensity.Override(0f);
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -151,10 +166,8 @@ public class PlayerMovement : MonoBehaviour
     // ─────────────────────────────────────────────
     void Update()
     {
-        // Kamera-look og bevægelse er begge låst når kortet er åbent
-        if (IsMapLocked) return;
+        if (IsDead || IsMapLocked) return;
 
-        // Kamera-rotation er tilladt selv når spilleren er gemt
         HandleLook();
 
         if (IsHiding) return;
@@ -165,34 +178,23 @@ public class PlayerMovement : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────
-    //  MAP LOCK API  ← kaldes af MapInspector
+    //  MAP LOCK API
     // ─────────────────────────────────────────────
-    /// <summary>
-    /// Låser eller frigiver spillerens bevægelse og kamera-look.
-    /// Kaldes af MapInspector når kortet åbnes/lukkes.
-    /// </summary>
     public void SetMapLock(bool locked)
     {
         IsMapLocked = locked;
-
         if (locked)
         {
-            // Stop al bevægelse med det samme så spilleren ikke glider
             _velocity = Vector3.zero;
             _verticalVelocity = groundedGravity;
         }
     }
 
     // ─────────────────────────────────────────────
-    //  HIDING API  ← kaldes af CardboardBox
+    //  HIDING API
     // ─────────────────────────────────────────────
-    /// <summary>Returnerer spillerens nuværende vandrette hastighed — bruges af BlindSorter.</summary>
     public float GetCurrentSpeed() => new Vector3(_velocity.x, 0f, _velocity.z).magnitude;
 
-    /// <summary>
-    /// Aktiverer gemme-tilstand og sætter den retning spilleren kigger ud af kassen.
-    /// exitDirection skal være en normaliseret world-space XZ-vektor.
-    /// </summary>
     public void SetHiding(bool hiding, Vector3 exitDirection = default)
     {
         IsHiding = hiding;
@@ -209,6 +211,70 @@ public class PlayerMovement : MonoBehaviour
             _velocity = Vector3.zero;
             _verticalVelocity = groundedGravity;
         }
+    }
+
+    // ─────────────────────────────────────────────
+    //  DAMAGE API  <- kaldes af BlindSorter
+    // ─────────────────────────────────────────────
+    /// <summary>
+    /// Foerste hit: roed vignette, spilleren er skadet.
+    /// Andet hit mens IsDamaged er true: spilleren doer.
+    /// </summary>
+    public void TakeDamage()
+    {
+        if (IsDead) return;
+
+        if (!IsDamaged)
+        {
+            IsDamaged = true;
+            if (_vignetteCoroutine != null) StopCoroutine(_vignetteCoroutine);
+            _vignetteCoroutine = StartCoroutine(DamageVignetteCoroutine());
+        }
+        else
+        {
+            Die();
+        }
+    }
+
+    void Die()
+    {
+        if (IsDead) return;
+        IsDead = true;
+
+        _velocity = Vector3.zero;
+        _verticalVelocity = 0f;
+
+        if (_vignetteCoroutine != null) StopCoroutine(_vignetteCoroutine);
+        _vignetteCoroutine = StartCoroutine(DeathVignetteCoroutine());
+    }
+
+    // ─────────────────────────────────────────────
+    //  VIGNETTE COROUTINES
+    // ─────────────────────────────────────────────
+    IEnumerator DamageVignetteCoroutine()
+    {
+        yield return LerpVignette(0.6f, 6f);
+        yield return new WaitForSeconds(0.3f);
+        yield return LerpVignette(0f, 0.6f / vignetteRecoverTime);
+        IsDamaged = false;
+    }
+
+    IEnumerator DeathVignetteCoroutine()
+    {
+        yield return LerpVignette(0.9f, 1.5f);
+    }
+
+    IEnumerator LerpVignette(float target, float speed)
+    {
+        if (_vignette == null) yield break;
+
+        while (!Mathf.Approximately(_vignette.intensity.value, target))
+        {
+            _vignette.intensity.Override(
+                Mathf.MoveTowards(_vignette.intensity.value, target, speed * Time.deltaTime));
+            yield return null;
+        }
+        _vignette.intensity.Override(target);
     }
 
     // ─────────────────────────────────────────────
@@ -278,9 +344,6 @@ public class PlayerMovement : MonoBehaviour
             origin.y = targetCamY;
             _cameraLocalOrigin = Vector3.Lerp(_cameraLocalOrigin, origin, Time.deltaTime * crouchTransitionSpeed);
 
-            // Flyt kameraet direkte så det følger crouch-højden —
-            // uden dette bevæger kameraet sig kun via HandleHeadBob()
-            // og ingenting sker når spilleren står stille.
             Vector3 camPos = cameraTransform.localPosition;
             camPos.y = _cameraLocalOrigin.y;
             cameraTransform.localPosition = camPos;
