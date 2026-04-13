@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 1758588519286257208}
   - component: {fileID: 3015057136622019010}
   - component: {fileID: 7172699061154214772}
+  - component: {fileID: 4588632902413037098}
   m_Layer: 9
   m_Name: Weeping angel 2.0 1
   m_TagString: Untagged
@@ -261,6 +262,29 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!136 &4588632902413037098
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 644023812078378797}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 1.03
+  m_Height: 7.25
+  m_Direction: 1
+  m_Center: {x: 0, y: 3.75, z: 0}
 --- !u!1 &3499149406534175930
 GameObject:
   m_ObjectHideFlags: 0
