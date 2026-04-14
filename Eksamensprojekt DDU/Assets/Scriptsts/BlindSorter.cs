@@ -96,6 +96,8 @@ public class BlindSorter : MonoBehaviour
     public float attackHitMoment = 0.5f;
     [Tooltip("Antal hit spilleren kan tage inden death")]
     public int hitsToKill = 2;
+    [Tooltip("Sekunder uden angreb inden spillerens hit-tæller nulstilles (recovery)")]
+    public float damageRecoverTime = 6f;
 
     // ─────────────────────────────────────────────────────────────
     //  ANIMATION
@@ -109,6 +111,8 @@ public class BlindSorter : MonoBehaviour
     public string paramAttack = "Attack";
     [Tooltip("Bool-parameter der sættes true når fjenden står stille — bruges til Idle1 animation")]
     public string paramIdle = "IsIdle";
+    [Tooltip("Skalerer animationens afspilningshastighed ift. agentens fart. 1 = ingen skalering. Juster hvis walk/run-animation ikke matcher bevægelseshastigheden.")]
+    public float animSpeedScale = 1f;
 
     // ─────────────────────────────────────────────────────────────
     //  LYD
@@ -153,6 +157,7 @@ public class BlindSorter : MonoBehaviour
     Coroutine _mainLoop;
     bool _attackInProgress;
     float _attackCooldownTimer;
+    float _damageRecoverTimer;
 
     // ─────────────────────────────────────────────────────────────
     //  START
@@ -223,6 +228,17 @@ public class BlindSorter : MonoBehaviour
         if (_attackCooldownTimer > 0f)
             _attackCooldownTimer -= Time.deltaTime;
 
+        // Recovery: nulstil hit-tæller hvis der er gået tilstrækkelig tid siden sidst angreb
+        if (_damageRecoverTimer > 0f)
+        {
+            _damageRecoverTimer -= Time.deltaTime;
+            if (_damageRecoverTimer <= 0f)
+            {
+                _playerHitCount = 0;
+                if (_pm != null) _pm.ResetDamage();
+            }
+        }
+
         // Hørelses-tjek hvert 0.2 sekund
         _hearingTick += Time.deltaTime;
         if (_hearingTick >= 0.2f)
@@ -233,7 +249,15 @@ public class BlindSorter : MonoBehaviour
 
         // Animator speed hvert frame
         if (anim != null && !string.IsNullOrEmpty(paramSpeed))
-            anim.SetFloat(paramSpeed, _agent.velocity.magnitude);
+        {
+            float spd = _agent.velocity.magnitude;
+            // animSpeedScale justerer afspilningshastigheden så animation matcher bevægelse
+            anim.SetFloat(paramSpeed, spd * animSpeedScale);
+
+            // IsIdle bool — true når agenten er stoppet (patrol-wait, investigate-pause osv.)
+            if (!string.IsNullOrEmpty(paramIdle))
+                anim.SetBool(paramIdle, spd < 0.1f && _agent.isStopped);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -461,16 +485,21 @@ public class BlindSorter : MonoBehaviour
 
         while (true)
         {
-            // Følg spilleren
+            // Opdater kun destination når lyd høres aktivt
+            // Ingen lyd = gå mod sidst kendte position, ikke spillerens aktuelle
             if (_player != null && !_playerIsHiding)
-                _agent.SetDestination(_player.position);
+            {
+                if (_heardSound)
+                    _agent.SetDestination(_player.position);
+                else
+                    _agent.SetDestination(_lastSoundPos);
+            }
 
-            // Sprint nulstiller timer helt — gang bremser den kun (halv rate)
-            // Ingen lyd = fuld nedtælling
+            // Sprint nulstiller timer helt — gang bremser den (halv rate) — stille = fuld nedtælling
             if (_heardSprint)
                 lingerTimer = chaseLinger;
             else if (_heardWalk)
-                lingerTimer -= Time.deltaTime * 0.5f;  // Halv hastighed ved gang-lyd
+                lingerTimer -= Time.deltaTime * 0.4f;
             else
                 lingerTimer -= Time.deltaTime;
 
@@ -537,6 +566,7 @@ public class BlindSorter : MonoBehaviour
         // Giv skade og stun præcis her — spilleren låses med det samme
         if (_pm != null) _pm.TakeDamage();
         _playerHitCount++;
+        _damageRecoverTimer = damageRecoverTime;
 
         // Vent resten af animationen færdig
         float remainder = attackDuration - hitMoment;

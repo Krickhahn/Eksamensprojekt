@@ -258,6 +258,17 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    /// <summary>Nulstiller skadet-tilstand og vignette — kaldes af BlindSorter efter recovery-tid.</summary>
+    public void ResetDamage()
+    {
+        if (IsDead) return;
+        IsDamaged = false;
+
+        // Stop vignette og fade den ud hvis den stadig er synlig
+        if (_vignetteCoroutine != null) StopCoroutine(_vignetteCoroutine);
+        _vignetteCoroutine = StartCoroutine(LerpVignette(0f, 1.5f));
+    }
+
     void Die()
     {
         if (IsDead) return;
