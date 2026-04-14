@@ -117,11 +117,17 @@ public class BlindSorter : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     //  LYD
     // ─────────────────────────────────────────────────────────────
-    [Header("Lyd")]
-    public AudioSource loopSource;
+    [Header("Lyd — kilder")]
+    [Tooltip("AudioSource til fjende-stemmelyde (investigate, alert, give up). Må ikke deles med sfxSource.")]
+    public AudioSource voiceSource;
+    [Tooltip("AudioSource til angreb og dødslyd")]
     public AudioSource sfxSource;
-    [Tooltip("Loop-lyd under patrulje")]
-    public AudioClip soundPatrol;
+    [Tooltip("AudioSource til footsteps — bør have Spatial Blend = 1 (3D)")]
+    public AudioSource footstepSource;
+    [Tooltip("AudioSource til ambient loop-lyd under patrulje")]
+    public AudioSource loopSource;
+
+    [Header("Lyd — stemme")]
     [Tooltip("Spilles når fjenden begynder at undersøge")]
     public AudioClip soundInvestigate;
     [Tooltip("Spilles når fjenden begynder at jage")]
@@ -132,6 +138,27 @@ public class BlindSorter : MonoBehaviour
     public AudioClip soundKill;
     [Tooltip("Spilles når fjenden giver op og vender tilbage til patrulje")]
     public AudioClip soundGiveUp;
+
+    [Header("Lyd — patrol loop")]
+    [Tooltip("Loop-lyd under patrulje")]
+    public AudioClip soundPatrol;
+
+    [Header("Lyd — footsteps")]
+    [Tooltip("Footstep-clips til normal gang — vælges tilfældigt")]
+    public AudioClip[] footstepsWalk;
+    [Tooltip("Footstep-clips til løb/jagt — vælges tilfældigt")]
+    public AudioClip[] footstepsRun;
+    [Tooltip("Sekunder mellem footstep-lyde ved normal gang")]
+    public float footstepIntervalWalk = 0.5f;
+    [Tooltip("Sekunder mellem footstep-lyde ved løb")]
+    public float footstepIntervalRun = 0.3f;
+    [Tooltip("Minimum agent-hastighed før footsteps spiller")]
+    public float footstepMinSpeed = 0.3f;
+    [Tooltip("Volumen på footstep-lyde (0–1)")]
+    [Range(0f, 1f)]
+    public float footstepVolume = 0.6f;
+    [Tooltip("Sekunder voice-lyden fader ud inden en ny starter")]
+    public float voiceFadeTime = 0.15f;
 
     // ─────────────────────────────────────────────────────────────
     //  PRIVATE STATE
@@ -152,6 +179,8 @@ public class BlindSorter : MonoBehaviour
 
     float _hearingTick;
     float _continuousSoundTimer;
+    float _footstepTimer;
+    Coroutine _voiceFadeCoroutine;
 
     // Coroutine-styring
     Coroutine _mainLoop;
@@ -258,6 +287,8 @@ public class BlindSorter : MonoBehaviour
             if (!string.IsNullOrEmpty(paramIdle))
                 anim.SetBool(paramIdle, spd < 0.1f && _agent.isStopped);
         }
+
+        UpdateFootsteps();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -373,7 +404,7 @@ public class BlindSorter : MonoBehaviour
         CurrentState = State.Investigating;
         _agent.speed = speedInvestigate;
         _continuousSoundTimer = 0f;
-        PlaySFX(soundInvestigate);
+        PlayVoice(soundInvestigate);
         StopLoopAudio();
         _mainLoop = StartCoroutine(InvestigateLoop(soundPos));
     }
@@ -385,7 +416,7 @@ public class BlindSorter : MonoBehaviour
         CurrentState = State.Chasing;
         _agent.speed = speedChase;
         _continuousSoundTimer = 0f;
-        PlaySFX(soundAlert);
+        PlayVoice(soundAlert);
         StopLoopAudio();
         _mainLoop = StartCoroutine(ChaseLoop());
     }
@@ -472,7 +503,7 @@ public class BlindSorter : MonoBehaviour
         }
 
         // 4) Gav op
-        PlaySFX(soundGiveUp);
+        PlayVoice(soundGiveUp);
         GoToState_Patrol();
     }
 
@@ -683,6 +714,42 @@ public class BlindSorter : MonoBehaviour
         anim.SetBool(paramIdle, idle);
     }
 
+    // Spiller en stemmelyd med fade-out af den forrige så der ikke sker et hårdt cut
+    void PlayVoice(AudioClip clip)
+    {
+        if (voiceSource == null || clip == null) return;
+        if (_voiceFadeCoroutine != null) StopCoroutine(_voiceFadeCoroutine);
+        _voiceFadeCoroutine = StartCoroutine(FadeAndPlayVoice(clip));
+    }
+
+    IEnumerator FadeAndPlayVoice(AudioClip clip)
+    {
+        // Fade ud hvis der allerede spiller en lyd
+        if (voiceSource.isPlaying && voiceFadeTime > 0f)
+        {
+            float startVol = voiceSource.volume;
+            float t = 0f;
+            while (t < voiceFadeTime)
+            {
+                t += Time.deltaTime;
+                voiceSource.volume = Mathf.Lerp(startVol, 0f, t / voiceFadeTime);
+                yield return null;
+            }
+            voiceSource.Stop();
+        }
+
+        // Spil ny lyd ved fuld volumen
+        voiceSource.volume = 1f;
+        voiceSource.PlayOneShot(clip);
+        _voiceFadeCoroutine = null;
+    }
+
+    void PlaySFX(AudioClip clip)
+    {
+        if (sfxSource != null && clip != null)
+            sfxSource.PlayOneShot(clip);
+    }
+
     void PlayLoop(AudioClip clip)
     {
         if (loopSource == null || clip == null) return;
@@ -697,10 +764,40 @@ public class BlindSorter : MonoBehaviour
         if (loopSource != null) loopSource.Stop();
     }
 
-    void PlaySFX(AudioClip clip)
+    // Footsteps — affyres baseret på agent-hastighed og en interval-timer
+    void UpdateFootsteps()
     {
-        if (sfxSource != null && clip != null)
-            sfxSource.PlayOneShot(clip);
+        if (footstepSource == null) return;
+
+        float spd = _agent.velocity.magnitude;
+        if (spd < footstepMinSpeed || _agent.isStopped)
+        {
+            // Stående stille — nulstil timer så første skridt kommer hurtigt
+            _footstepTimer = 0f;
+            return;
+        }
+
+        bool isRunning = spd >= speedSprint * 0.8f; // lidt under sprint-grænsen for at fange chase-speed
+        float interval = isRunning ? footstepIntervalRun : footstepIntervalWalk;
+
+        _footstepTimer -= Time.deltaTime;
+        if (_footstepTimer <= 0f)
+        {
+            _footstepTimer = interval;
+
+            AudioClip[] clips = isRunning ? footstepsRun : footstepsWalk;
+
+            // Brug walk-clips som fallback hvis run-clips ikke er sat
+            if ((clips == null || clips.Length == 0) && isRunning)
+                clips = footstepsWalk;
+
+            if (clips != null && clips.Length > 0)
+            {
+                AudioClip step = clips[Random.Range(0, clips.Length)];
+                if (step != null)
+                    footstepSource.PlayOneShot(step, footstepVolume);
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

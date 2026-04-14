@@ -14,6 +14,11 @@
 ///   Det roterer vandret med spilleren når du drejer til siderne,
 ///   men tipper ikke når du kigger op/ned.
 ///   Brug "Rotation Offset" til at justere hvilken side der vender fremad per objekt.
+///
+/// LYD:
+///   Tilføj en AudioSource-komponent til dette GameObject (Play On Awake: OFF, Loop: OFF).
+///   Fyld lyd-arrays med dine clips i Inspector — scriptet vælger tilfældigt blandt dem.
+///   Pakke-type lydene spilles kort efter pickup- og putdown-lyden (packageTypeSoundDelay sekunder).
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Collider))]
@@ -50,10 +55,61 @@ public class PickupObject : MonoBehaviour
              "0 = ingen effekt. Prøv værdier mellem 0 og 20.")]
     public float weight = 5f;
 
-
     [Header("Skanner")]
     [Tooltip("ScannerAnimator-komponenten på Scanner-objektet.\nSkanneren glider ned/op når dette objekt samles op/sættes ned.")]
     public ScannerAnimator scannerAnimator;
+
+    // ── Lyd ───────────────────────────────────────────────────────
+
+    [Header("Lyd — Opsamling")]
+    [Tooltip("Lyde der kan afspilles når pakken samles op. Én vælges tilfældigt.\n" +
+             "Kræver en AudioSource-komponent på dette GameObject.")]
+    public AudioClip[] pickupSounds;
+
+    [Tooltip("Lydstyrke for opsamlings-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float pickupVolume = 1f;
+
+    [Header("Lyd — Sætning ned")]
+    [Tooltip("Lyde der kan afspilles når pakken sættes ned. Én vælges tilfældigt.")]
+    public AudioClip[] putdownSounds;
+
+    [Tooltip("Lydstyrke for sætning-ned-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float putdownVolume = 1f;
+
+    [Header("Lyd — Pakke-type (opsamling)")]
+    [Tooltip("Lyde der afspilles ved opsamling af en Standard-pakke. Én vælges tilfældigt.\n" +
+             "Spilles kort efter pickup-lyden — brug fx en neutral kvittering.")]
+    public AudioClip[] standardPickupTypeSounds;
+
+    [Tooltip("Lyde der afspilles ved opsamling af en Fragile-pakke. Én vælges tilfældigt.\n" +
+             "Brug fx en advarselstone eller en forsigtig lyd.")]
+    public AudioClip[] fragilePickupTypeSounds;
+
+    [Tooltip("Lyde der afspilles ved opsamling af en Heavy-pakke. Én vælges tilfældigt.\n" +
+             "Brug fx et grunt eller en tung lyd.")]
+    public AudioClip[] heavyPickupTypeSounds;
+
+    [Header("Lyd — Pakke-type (sætning ned)")]
+    [Tooltip("Lyde der afspilles når en Standard-pakke sættes ned. Én vælges tilfældigt.")]
+    public AudioClip[] standardPutdownTypeSounds;
+
+    [Tooltip("Lyde der afspilles når en Fragile-pakke sættes ned. Én vælges tilfældigt.\n" +
+             "Brug fx en lettelsens suk eller en forsigtig lyd.")]
+    public AudioClip[] fragilePutdownTypeSounds;
+
+    [Tooltip("Lyde der afspilles når en Heavy-pakke sættes ned. Én vælges tilfældigt.\n" +
+             "Brug fx et tungt bump eller en aflastningslyd.")]
+    public AudioClip[] heavyPutdownTypeSounds;
+
+    [Tooltip("Forsinkelse i sekunder før pakke-type lyden afspilles efter pickup- eller putdown-lyden.\n" +
+             "0 = spilles samtidig.")]
+    public float packageTypeSoundDelay = 0.2f;
+
+    [Tooltip("Lydstyrke for pakke-type lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float packageTypeVolume = 0.85f;
 
     // ── Private state ──────────────────────────────────────────────
     private bool _isHeld;
@@ -64,6 +120,7 @@ public class PickupObject : MonoBehaviour
     private const string HeldLayerName = "HeldObject";
     private RigidbodyInterpolation _originalInterpolation;
     private Scannable _scannable;
+    private AudioSource _audio;
 
     /// <summary>True hvis spilleren pt. holder et objekt. Bruges af ScannerDisplay.</summary>
     public static bool IsHoldingItem { get; private set; }
@@ -73,23 +130,29 @@ public class PickupObject : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody>();
         _cam = Camera.main;
-        // Søg i komponenten selv, children og parent
         _scannable = GetComponent<Scannable>()
                   ?? GetComponentInChildren<Scannable>()
                   ?? GetComponentInParent<Scannable>();
+
+        _audio = GetComponent<AudioSource>();
+        if (_audio == null)
+        {
+            _audio = gameObject.AddComponent<AudioSource>();
+            _audio.playOnAwake = false;
+            _audio.loop = false;
+            _audio.spatialBlend = 1f; // 3D-lyd — ændres til 0 for 2D
+        }
 
         if (_cam == null)
             Debug.LogWarning("[PickupObject] Intet kamera med 'MainCamera'-tag fundet!");
 
         _originalLayer = gameObject.layer;
 
-        // Find PlayerMovement via kameraets parent-hierarki
         if (_cam != null)
             _player = _cam.GetComponentInParent<PlayerMovement>();
 
         if (_player == null)
             Debug.LogWarning("[PickupObject] Fandt ikke PlayerMovement — vægt-effekt virker ikke.");
-
     }
 
     void Update()
@@ -103,17 +166,10 @@ public class PickupObject : MonoBehaviour
         }
     }
 
-    // FixedUpdate er ikke nødvendig — pakken er kinematic mens den holdes
-    // og velocity håndteres ikke via fysikken under hold
-
     void LateUpdate()
     {
         if (!_isHeld) return;
 
-        // ── Position ──────────────────────────────────────────────
-        // Vi bruger transform.position direkte i stedet for MovePosition
-        // så bevægelsen er fuldt synkroniseret med kameraet hvert frame
-        // uden at gå igennem fysikmotorens interpolation.
         Vector3 targetPos = _cam.transform.position
                           + _cam.transform.forward * holdDistance
                           + _cam.transform.right * holdOffset.x
@@ -126,9 +182,6 @@ public class PickupObject : MonoBehaviour
             1f - Mathf.Exp(-followSpeed * Time.deltaTime)
         );
 
-        // ── Rotation ──────────────────────────────────────────────
-        // Kun kameraets vandrette drejning (yaw) bruges — pitch ignoreres
-        // så kassen ikke tipper når man kigger op/ned.
         float cameraYaw = _cam.transform.eulerAngles.y;
         Quaternion yawRot = Quaternion.Euler(0f, cameraYaw + yawOffset, 0f);
         Quaternion upright = Quaternion.Euler(uprightOffset);
@@ -142,8 +195,6 @@ public class PickupObject : MonoBehaviour
     {
         Ray ray = new Ray(_cam.transform.position, _cam.transform.forward);
 
-        // QueryTriggerInteraction.Ignore springer trigger-collidere over (fx DeliveryZone)
-        // så raycastet ikke blokeres af en zone pakken ligger i.
         if (Physics.Raycast(ray, out RaycastHit hit, pickupRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             if (hit.transform == transform || hit.transform.IsChildOf(transform))
@@ -156,7 +207,6 @@ public class PickupObject : MonoBehaviour
         _isHeld = true;
         IsHoldingItem = true;
 
-        // Sæt kinematic så fysikken ikke kæmper mod vores transform-opdateringer
         _originalInterpolation = _rb.interpolation;
         _rb.isKinematic = true;
         _rb.interpolation = RigidbodyInterpolation.None;
@@ -169,7 +219,6 @@ public class PickupObject : MonoBehaviour
 
         if (_player != null)
         {
-            // Heavy pakker bruger dobbelt vægtstraf
             float effectiveWeight = (_scannable != null && _scannable.isHeavy)
                 ? weight * 2f
                 : weight;
@@ -177,6 +226,10 @@ public class PickupObject : MonoBehaviour
         }
 
         scannerAnimator?.Hide();
+
+        // ── Lyd ───────────────────────────────────────────────────
+        PlayRandomSound(pickupSounds, pickupVolume);
+        StartCoroutine(PlayPackageTypeSoundDelayed(isPickup: true));
 
         Debug.Log($"[PickupObject] Samlede op: {gameObject.name} ({weight} kg)");
     }
@@ -186,7 +239,6 @@ public class PickupObject : MonoBehaviour
         _isHeld = false;
         IsHoldingItem = false;
 
-        // Gendan fysik
         _rb.isKinematic = false;
         _rb.interpolation = _originalInterpolation;
         _rb.useGravity = true;
@@ -200,15 +252,55 @@ public class PickupObject : MonoBehaviour
 
         scannerAnimator?.Show();
 
+        // ── Lyd ───────────────────────────────────────────────────
+        PlayRandomSound(putdownSounds, putdownVolume);
+        StartCoroutine(PlayPackageTypeSoundDelayed(isPickup: false));
+
         Debug.Log($"[PickupObject] Satte ned: {gameObject.name}");
+    }
+
+    // ── Lyd-hjælpere ──────────────────────────────────────────────
+
+    /// <summary>Spiller en tilfældig clip fra arrayet, hvis det ikke er tomt.</summary>
+    void PlayRandomSound(AudioClip[] clips, float volume)
+    {
+        if (_audio == null || clips == null || clips.Length == 0) return;
+
+        AudioClip clip = clips[Random.Range(0, clips.Length)];
+        if (clip != null)
+            _audio.PlayOneShot(clip, volume);
+    }
+
+    /// <summary>
+    /// Venter <see cref="packageTypeSoundDelay"/> sekunder og spiller derefter
+    /// den pakke-type-specifikke lyd for enten opsamling eller sætning ned.
+    /// </summary>
+    System.Collections.IEnumerator PlayPackageTypeSoundDelayed(bool isPickup)
+    {
+        if (packageTypeSoundDelay > 0f)
+            yield return new WaitForSeconds(packageTypeSoundDelay);
+
+        if (_scannable == null) yield break;
+
+        AudioClip[] typeSounds = isPickup
+            ? _scannable.packageType switch
+            {
+                PackageType.Fragile => fragilePickupTypeSounds,
+                PackageType.Heavy => heavyPickupTypeSounds,
+                _ => standardPickupTypeSounds,
+            }
+            : _scannable.packageType switch
+            {
+                PackageType.Fragile => fragilePutdownTypeSounds,
+                PackageType.Heavy => heavyPutdownTypeSounds,
+                _ => standardPutdownTypeSounds,
+            };
+
+        PlayRandomSound(typeSounds, packageTypeVolume);
     }
 
     // ── Fragile collision ─────────────────────────────────────────
 
-    /// <summary>
-    /// Tjekker om pakken overlapper med en afleveringszone eller spawnzone.
-    /// Bruges til at undgå straf når pakken sættes ned på et sikkert sted.
-    /// </summary>
     bool IsInsideSafeZone()
     {
         Collider col = GetComponent<Collider>();
@@ -230,9 +322,6 @@ public class PickupObject : MonoBehaviour
         return false;
     }
 
-    /// <summary>
-    /// Trækker fragile-straf fra hvis alle betingelser er opfyldt.
-    /// </summary>
     void ApplyFragilePenalty()
     {
         if (_scannable == null || !_scannable.isFragile) return;
@@ -241,8 +330,6 @@ public class PickupObject : MonoBehaviour
 
         int penalty = _scannable.fragileDropPenalty;
 
-        // Find den ordre der tilhører præcis denne pakke-instans
-        // Ordren behøver ikke være aktiv endnu — straffen akkumuleres uanset hvornår pakken tabes
         Order order = OrderManager.Instance?.FindOrderForPackage(_scannable);
         if (order != null)
         {
@@ -259,7 +346,6 @@ public class PickupObject : MonoBehaviour
     {
         if (_isHeld) return;
 
-        // Hent scannable på ny hver gang — sikrer vi har den rigtige selv om hierarki er komplekst
         if (_scannable == null)
             _scannable = GetComponent<Scannable>() ?? GetComponentInChildren<Scannable>()
                       ?? GetComponentInParent<Scannable>();

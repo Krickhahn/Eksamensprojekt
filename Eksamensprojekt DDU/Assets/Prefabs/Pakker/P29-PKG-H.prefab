@@ -287,6 +287,21 @@ MonoBehaviour:
   uprightOffset: {x: 0, y: 90, z: 0}
   weight: 15
   scannerAnimator: {fileID: 0}
+  pickupSounds:
+  - {fileID: 0}
+  - {fileID: 0}
+  pickupVolume: 1
+  putdownSounds:
+  - {fileID: 8300000, guid: 516856f0d0b06bb4884ed7e29463305a, type: 3}
+  putdownVolume: 1
+  standardPickupTypeSounds: []
+  fragilePickupTypeSounds: []
+  heavyPickupTypeSounds: []
+  standardPutdownTypeSounds: []
+  fragilePutdownTypeSounds: []
+  heavyPutdownTypeSounds: []
+  packageTypeSoundDelay: 0.2
+  packageTypeVolume: 0.85
 --- !u!114 &1000105704125158318
 MonoBehaviour:
   m_ObjectHideFlags: 0

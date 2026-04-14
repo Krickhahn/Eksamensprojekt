@@ -21,6 +21,11 @@ using UnityEngine.Events;
 ///   Ordrer der stadig er aktive når skiftet slutter giver 0 point.
 ///   Multiplikatoren reduceres gradvist i Pressure- og Overtime-faserne
 ///   så det altid kan betale sig at aflevere hurtigt.
+///
+/// LYD:
+///   Tilføj en AudioSource-komponent til dette GameObject (Play On Awake: OFF, Loop: OFF).
+///   Fyld Pressure-, Overtime- og Shift Ended-arrays med dine clips i Inspector.
+///   Scriptet vælger én tilfældig clip og afspiller den én gang ved faseskift.
 /// </summary>
 public class ShiftTimer : MonoBehaviour
 {
@@ -61,6 +66,36 @@ public class ShiftTimer : MonoBehaviour
     [Tooltip("Kaldes når timeren løber ud — skiftet er slut.")]
     public UnityEvent onShiftEnd;
 
+    // ── Lyd ───────────────────────────────────────────────────────
+
+    [Header("Lyd — Pressure-fase")]
+    [Tooltip("Lyde der afspilles når Pressure-fasen starter. Én vælges tilfældigt.\n" +
+             "Brug fx en stressende lyd eller en anspændt jingle.\n" +
+             "Kræver en AudioSource-komponent på dette GameObject.")]
+    public AudioClip[] pressureSounds;
+
+    [Tooltip("Lydstyrke for Pressure-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float pressureVolume = 1f;
+
+    [Header("Lyd — Overtime-fase")]
+    [Tooltip("Lyde der afspilles når Overtime-fasen starter. Én vælges tilfældigt.\n" +
+             "Brug fx en alarm eller en mere intens lyd end Pressure.")]
+    public AudioClip[] overtimeSounds;
+
+    [Tooltip("Lydstyrke for Overtime-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float overtimeVolume = 1f;
+
+    [Header("Lyd — Skiftet er slut")]
+    [Tooltip("Lyde der afspilles når timeren løber ud. Én vælges tilfældigt.\n" +
+             "Brug fx en afslutningsjingle eller en slutfanfare.")]
+    public AudioClip[] shiftEndedSounds;
+
+    [Tooltip("Lydstyrke for skift-slut-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float shiftEndedVolume = 1f;
+
     // ── Runtime ────────────────────────────────────────────────────
     public float Elapsed { get; private set; }
     public float Progress => Mathf.Clamp01(Elapsed / shiftDuration);
@@ -88,12 +123,22 @@ public class ShiftTimer : MonoBehaviour
     private float _lastTickSecond;
     private bool _pressureFired;
     private bool _overtimeFired;
+    private AudioSource _audio;
 
     // ──────────────────────────────────────────────────────────────
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        _audio = GetComponent<AudioSource>();
+        if (_audio == null)
+        {
+            _audio = gameObject.AddComponent<AudioSource>();
+            _audio.playOnAwake = false;
+            _audio.loop = false;
+            _audio.spatialBlend = 0f; // 2D-lyd — fase-lyde hører typisk til UI/ambient
+        }
     }
 
     void Start()
@@ -121,6 +166,7 @@ public class ShiftTimer : MonoBehaviour
             _pressureFired = true;
             Phase = ShiftPhase.Pressure;
             onPressureStart?.Invoke();
+            PlayRandomSound(pressureSounds, pressureVolume);
             Debug.Log("[ShiftTimer] Pressure-fase starter!");
         }
 
@@ -129,6 +175,7 @@ public class ShiftTimer : MonoBehaviour
             _overtimeFired = true;
             Phase = ShiftPhase.Overtime;
             onOvertimeStart?.Invoke();
+            PlayRandomSound(overtimeSounds, overtimeVolume);
             Debug.Log("[ShiftTimer] Overtime-fase starter!");
         }
 
@@ -140,9 +187,24 @@ public class ShiftTimer : MonoBehaviour
             ShiftEnded = true;
             Phase = ShiftPhase.Ended;
             onShiftEnd?.Invoke();
+            PlayRandomSound(shiftEndedSounds, shiftEndedVolume);
             Debug.Log("[ShiftTimer] Skiftet er slut!");
         }
     }
+
+    // ── Lyd-hjælper ───────────────────────────────────────────────
+
+    /// <summary>Spiller en tilfældig clip fra arrayet, hvis det ikke er tomt.</summary>
+    void PlayRandomSound(AudioClip[] clips, float volume)
+    {
+        if (_audio == null || clips == null || clips.Length == 0) return;
+
+        AudioClip clip = clips[Random.Range(0, clips.Length)];
+        if (clip != null)
+            _audio.PlayOneShot(clip, volume);
+    }
+
+    // ── Offentlige metoder ─────────────────────────────────────────
 
     /// <summary>
     /// Formaterer den resterende tid som MM:SS.

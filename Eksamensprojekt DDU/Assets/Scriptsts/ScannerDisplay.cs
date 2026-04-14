@@ -20,7 +20,9 @@ using TMPro;
 ///   6. Tilføj en AudioSource-komponent til det samme GameObject som dette script.
 ///      (Play On Awake: OFF, Loop: OFF)
 ///   7. Opret en AudioClip (fx en kort bip) og træk den ind i Beep Clip-feltet.
-///      Justér Beep Volume efter smag.
+///   8. Fyld Error Sounds og Warning Sounds med dine fejl/advarselslyde.
+///      Én vælges tilfældigt per hændelse. Lad felterne stå tomme for ingen lyd.
+///      Justér de tilhørende Volume-felter efter smag.
 ///
 /// DISPLAY OPFØRSEL:
 ///   Normal besked  → ruller fra højre mod venstre, gentager i loop
@@ -65,13 +67,44 @@ public class ScannerDisplay : MonoBehaviour
     [Tooltip("ScannerLight-komponenten der flasher når skanneren bruges. Valgfrit.")]
     public ScannerLight scannerLight;
 
-    [Header("Lyd")]
+    [Header("Lyd — Scanning (bip)")]
     [Tooltip("AudioClip der afspilles når skanneren bruges (bip-lyd). Kræver en AudioSource på dette GameObject.")]
     public AudioClip beepClip;
 
     [Tooltip("Lydstyrke for bip-lyden (0–1).")]
     [Range(0f, 1f)]
     public float beepVolume = 1f;
+
+    [Header("Lyd — Fejl (rød tekst)")]
+    [Tooltip("Lyde der afspilles ved fejl-beskeder (colorError), fx forkert pakke eller forkert zone.\n" +
+             "Én vælges tilfældigt. Lad feltet stå tomt for ingen ekstra lyd.")]
+    public AudioClip[] errorSounds;
+
+    [Tooltip("Lydstyrke for fejl-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float errorVolume = 1f;
+
+    [Header("Lyd — Advarsel (gul tekst)")]
+    [Tooltip("Lyde der afspilles ved advarsel-beskeder (colorWarning), fx 'PLACE PACKAGE'.\n" +
+             "Én vælges tilfældigt. Lad feltet stå tomt for ingen ekstra lyd.")]
+    public AudioClip[] warningSounds;
+
+    [Tooltip("Lydstyrke for advarsel-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float warningVolume = 0.85f;
+
+    [Header("Lyd — Succes (grøn tekst)")]
+    [Tooltip("Lyde der afspilles når en pakke er korrekt skannet (ItemConfirmed).\n" +
+             "Én vælges tilfældigt. Brug fx en positiv bip eller en godkendelseslyd.")]
+    public AudioClip[] successSounds;
+
+    [Tooltip("Lyde der afspilles når en ordre er fuldstændig afleveret (OrderComplete).\n" +
+             "Én vælges tilfældigt. Brug fx en fanfare eller en mere markant succeslyd.")]
+    public AudioClip[] orderCompleteSounds;
+
+    [Tooltip("Lydstyrke for succes-lyde (0–1).")]
+    [Range(0f, 1f)]
+    public float successVolume = 1f;
 
     // ── Private ────────────────────────────────────────────────────
     private Camera _cam;
@@ -80,8 +113,6 @@ public class ScannerDisplay : MonoBehaviour
     private string _loopMessage;
     private Color _loopColor;
 
-    // Forhindrer ShowStandBy() i at overskrive "GO TO OFFICE" ved opstart.
-    // Sættes til true første gang en rigtig ordre vises.
     private bool _orderHasBeenShown = false;
 
     // ──────────────────────────────────────────────────────────────
@@ -89,7 +120,6 @@ public class ScannerDisplay : MonoBehaviour
     {
         _cam = Camera.main;
 
-        // Hent eller tilføj AudioSource automatisk
         _audio = GetComponent<AudioSource>();
         if (_audio == null)
         {
@@ -102,14 +132,11 @@ public class ScannerDisplay : MonoBehaviour
 
     void Start()
     {
-        // Køres efter alle andre scripts' Awake() og Start() så "GO TO OFFICE"
-        // ikke overskrives af fx OrderManager.ShowStandBy() i dens Start().
         StartCoroutine(InitDisplay());
     }
 
     IEnumerator InitDisplay()
     {
-        // Vent én frame så alle andre Start()-kald er færdige
         yield return null;
         SetLoop("GO TO OFFICE", colorNormal);
     }
@@ -128,11 +155,21 @@ public class ScannerDisplay : MonoBehaviour
 
     // ── Lyd ───────────────────────────────────────────────────────
 
-    /// <summary>Afspiller bip-lyden én gang. Kræver at beepClip er assignet.</summary>
+    /// <summary>Afspiller bip-lyden én gang.</summary>
     void PlayBeep()
     {
         if (_audio == null || beepClip == null) return;
         _audio.PlayOneShot(beepClip, beepVolume);
+    }
+
+    /// <summary>Afspiller en tilfældig clip fra arrayet med den angivne lydstyrke.</summary>
+    void PlayRandomSound(AudioClip[] clips, float volume)
+    {
+        if (_audio == null || clips == null || clips.Length == 0) return;
+
+        AudioClip clip = clips[Random.Range(0, clips.Length)];
+        if (clip != null)
+            _audio.PlayOneShot(clip, volume);
     }
 
     // ── Offentlige metoder kaldt af OrderManager ───────────────────
@@ -156,6 +193,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowItemConfirmed(Order order)
     {
+        PlayRandomSound(successSounds, successVolume);
         SetLoop(
             $"OK >> {order.deliveryZone?.zoneName ?? "?"}",
             colorSuccess
@@ -164,6 +202,7 @@ public class ScannerDisplay : MonoBehaviour
 
     public void ShowOrderComplete(Order order, System.Action onFinished = null)
     {
+        PlayRandomSound(orderCompleteSounds, successVolume);
         StartDisplay(ScrollOnceThen(
             $"DONE +{order.earnedPoints}PT",
             colorSuccess,
@@ -171,10 +210,6 @@ public class ScannerDisplay : MonoBehaviour
         ));
     }
 
-    /// <summary>
-    /// Ruller en besked én gang og kalder en callback når den er færdig.
-    /// Loop-beskeden genoptages IKKE automatisk — det er op til callback'en.
-    /// </summary>
     IEnumerator ScrollOnceThen(string message, Color color, System.Action onFinished)
     {
         float delay = 1f / Mathf.Max(0.1f, scrollSpeed);
@@ -183,37 +218,60 @@ public class ScannerDisplay : MonoBehaviour
     }
 
     public void ShowShiftEnded() => SetLoop("SHIFT IS OVER", colorWarning);
+
     public void ShowStandBy()
     {
-        // Ignorér kald fra OrderManager.StartDelayed ved opstart —
-        // displayet skal vise "GO TO OFFICE" indtil første ordre ankommer.
         if (!_orderHasBeenShown) return;
-
         SetLoop("STAND BY", colorNormal);
     }
+
     public void ShowGoToOffice()
     {
         SetLoop("GO TO OFFICE", colorNormal);
     }
+
     public void ShowAllComplete() => SetLoop("ALL DONE", colorSuccess);
 
     public void ShowWrongItem(string scannedID, string expectedID)
-        => PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
+    {
+        PlayRandomSound(errorSounds, errorVolume);
+        PlayOnce($"ERR: {scannedID} != {expectedID}", colorError);
+    }
 
     public void ShowWrongZone(DeliveryZone expectedZone)
-        => PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
+    {
+        PlayRandomSound(errorSounds, errorVolume);
+        PlayOnce($"ERR ZONE: {expectedZone?.zoneName ?? "?"}", colorError);
+    }
 
     public void ShowPackageNotInZone(DeliveryZone zone)
-        => PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
+    {
+        PlayRandomSound(warningSounds, warningVolume);
+        PlayOnce($"PLACE PACKAGE: {zone?.zoneName ?? "?"}", colorWarning);
+    }
 
     public void ShowWrongPackageInZone(string expectedID)
-        => PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
+    {
+        PlayRandomSound(errorSounds, errorVolume);
+        PlayOnce($"WRONG PACKAGE IN ZONE: {expectedID}", colorError);
+    }
 
     public void ShowCustomMessage(string message, Color color)
-        => PlayOnce(message, color);
+    {
+        // Afspil lyd baseret på farven — error = rød, warning = gul, ellers ingen ekstra lyd
+        if (color == colorError)
+            PlayRandomSound(errorSounds, errorVolume);
+        else if (color == colorWarning)
+            PlayRandomSound(warningSounds, warningVolume);
+
+        PlayOnce(message, color);
+    }
 
     public void ShowScanPackageFirst()
-        => PlayOnce("SCAN PACKAGE FIRST", colorWarning);
+    {
+        PlayRandomSound(warningSounds, warningVolume);
+        PlayOnce("SCAN PACKAGE FIRST", colorWarning);
+    }
 
     // ── Scanning ──────────────────────────────────────────────────
 
