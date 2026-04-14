@@ -107,6 +107,8 @@ public class BlindSorter : MonoBehaviour
     public string paramSpeed = "Speed";
     [Tooltip("Trigger-parameter til attack-animation")]
     public string paramAttack = "Attack";
+    [Tooltip("Bool-parameter der sættes true når fjenden står stille — bruges til Idle1 animation")]
+    public string paramIdle = "IsIdle";
 
     // ─────────────────────────────────────────────────────────────
     //  LYD
@@ -373,6 +375,7 @@ public class BlindSorter : MonoBehaviour
         }
         _agent.isStopped = false;
         _attackInProgress = false;
+        SetIdle(false); // sørg for idle-animation aldrig sidder fast
         // Nulstil IKKE _attackCooldownTimer her — den skal stadig løbe
     }
 
@@ -391,9 +394,11 @@ public class BlindSorter : MonoBehaviour
             // Gå derhen
             yield return WaitArrived(25f);
 
-            // Idle ved waypoint
+            // Idle ved waypoint — IsIdle=true → Idle1 animation
             _agent.isStopped = true;
+            SetIdle(true);
             yield return new WaitForSeconds(patrolWait);
+            SetIdle(false);
             _agent.isStopped = false;
         }
     }
@@ -408,9 +413,11 @@ public class BlindSorter : MonoBehaviour
         _agent.SetDestination(center);
         yield return WaitArrived(12f);
 
-        // 2) Idle-pause ved positionen
+        // 2) Idle-pause ved positionen — IsIdle=true → Idle1 animation
         _agent.isStopped = true;
+        SetIdle(true);
         yield return new WaitForSeconds(investigateIdlePause);
+        SetIdle(false);
         _agent.isStopped = false;
 
         // 3) Søg rundt i radius
@@ -513,9 +520,14 @@ public class BlindSorter : MonoBehaviour
                 transform.rotation = Quaternion.LookRotation(dir);
         }
 
-        // Attack-animation og lyd — trigger sættes én gang her
+        // Attack-animation og lyd — ResetTrigger først så køen er tom,
+        // derefter SetTrigger præcis én gang. Forhindrer at Unity
+        // genafspiller animationen hvis triggeren er akkumuleret i køen.
         if (anim != null && !string.IsNullOrEmpty(paramAttack))
+        {
+            anim.ResetTrigger(paramAttack);
             anim.SetTrigger(paramAttack);
+        }
         PlaySFX(soundAttack);
 
         // Vent til slagets ramme-tidspunkt
@@ -635,6 +647,12 @@ public class BlindSorter : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
     //  LYD
     // ─────────────────────────────────────────────────────────────
+    void SetIdle(bool idle)
+    {
+        if (anim == null || string.IsNullOrEmpty(paramIdle)) return;
+        anim.SetBool(paramIdle, idle);
+    }
+
     void PlayLoop(AudioClip clip)
     {
         if (loopSource == null || clip == null) return;
