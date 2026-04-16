@@ -4089,6 +4089,9 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 7241221270458555478, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
+      insertIndex: 5
+      addedObject: {fileID: 589697285}
+    - targetCorrespondingSourceObject: {fileID: 7241221270458555478, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
       insertIndex: -1
       addedObject: {fileID: 589697260}
     - targetCorrespondingSourceObject: {fileID: 7241221270458555478, guid: 4855aff789275554b86c8093ce83bafb, type: 3}
@@ -5515,6 +5518,31 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 589697259}
   m_Enabled: 1
+--- !u!114 &589697285
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 589697259}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef99ae74d407f7b47b8cad71df3ba9fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeartbeatProximitySystem
+  detectionRadius: 20
+  enemyLayer:
+    serializedVersion: 2
+    m_Bits: 512
+  awarenessDelay: 2
+  beatInterval: 1
+  minVolume: 0.066
+  maxVolume: 0.475
+  fullVolumeDistance: 2
+  heartbeatClip: {fileID: 8300000, guid: 6025b65d61dbcd441a078b6302e6b8b8, type: 3}
+  heartbeatClipSecondary: {fileID: 0}
+  secondaryBeatDelay: 0.15
+  weepingAngel: {fileID: 939664795}
 --- !u!4 &593983881 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 8330027977666347274, guid: 0015a6affb34bd94bb36b4c52ba4c777, type: 3}
@@ -6788,6 +6816,14 @@ PrefabInstance:
       propertyPath: m_ProvidesContacts
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 1047365685130993863, guid: 97f3319c77d5e374ea37d71e6963d497, type: 3}
+      propertyPath: OutputAudioMixerGroup
+      value: 
+      objectReference: {fileID: 24300002, guid: 1dda91d2b43432b4893ffdb0d8e98e76, type: 2}
+    - target: {fileID: 1469022831185589511, guid: 97f3319c77d5e374ea37d71e6963d497, type: 3}
+      propertyPath: OutputAudioMixerGroup
+      value: 
+      objectReference: {fileID: 24300002, guid: 1dda91d2b43432b4893ffdb0d8e98e76, type: 2}
     - target: {fileID: 4702937978697796780, guid: 97f3319c77d5e374ea37d71e6963d497, type: 3}
       propertyPath: m_Name
       value: Weeping angel 2.0 1
@@ -8303,6 +8339,17 @@ Transform:
   - {fileID: 1283490719}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &939664795 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7459379969478829695, guid: 97f3319c77d5e374ea37d71e6963d497, type: 3}
+  m_PrefabInstance: {fileID: 729623065}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89f56da7b1d8cf34caead76c851e4776, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WeepingAngelEnemy
 --- !u!1 &946187955
 GameObject:
   m_ObjectHideFlags: 0
