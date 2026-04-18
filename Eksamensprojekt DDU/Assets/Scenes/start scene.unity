@@ -2880,8 +2880,38 @@ MonoBehaviour:
   blinkCloseDuration: 0.4
   blinkOpenDuration: 0.5
   blinkHoldDuration: 0.2
-  typewriterFullText: "Your cooperation has been noted.\nThe agreement is now binding.\r\nStatus:
-    \u2026 ACCEPTED \r\n\r\n\r\nEMPLOYERS NOTE: __"
+  typewriterFullText: 'Employment Notice
+
+    
+
+    Your cooperation has been noted.
+
+    The
+    agreement is now binding.
+
+    
+
+    You are expected to report immediately
+    for your first shift. Upon arrival, proceed to the main office, located behind
+    the door on your right hand side. Once inside, locate and scan the fax machine
+    to start your first shift.
+
+    
+
+    Failure to comply may result in immediate
+    termination of contract.
+
+    
+
+    We look forward to your continued cooperation.
+
+    
+
+    Side
+    note: Previous employees have gone schizophrenic while at this occupancy. They
+    claimed to be seeing things, but honestly, I think they were just paranoid. Some
+    even disappeared before giving notice, so i would recommend to be aware of your
+    surroundings.'
   typewriterTextColor: {r: 0.05, g: 0.05, b: 0.1, a: 1}
   typewriterTextSpeed: 28
   typewriterSoundSpeed: 14
