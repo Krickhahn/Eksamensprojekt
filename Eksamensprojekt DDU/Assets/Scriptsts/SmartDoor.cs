@@ -282,6 +282,14 @@ public class SmartDoor : MonoBehaviour
     // ─────────────────────────────────────────────────────────────
 
 #if UNITY_EDITOR
+    [Header("Debug Gizmos")]
+    [Tooltip("Draw the raycast from the player aimed at the door pivot / hinge origin (yellow).")]
+    public bool showRaycastToOrigin = true;
+
+    [Tooltip("Draw the raycast from the player aimed at the geometric centre of the door mesh (cyan). " +
+             "This is the ray the runtime code actually fires.")]
+    public bool showRaycastToCenter = true;
+
     private void OnDrawGizmosSelected()
     {
         // Front detection range (cyan)
@@ -312,11 +320,66 @@ public class SmartDoor : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawRay(transform.position, -transform.forward * 1.4f);
 
-        // Ray to player
         if (player != null)
         {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawLine(player.position, transform.TransformPoint(_doorCenter));
+            // ── Raycast to door ORIGIN (pivot / hinge point) ──────────────────
+            // Shown in YELLOW. Helps you visualise how far the hinge is from
+            // the player and check whether your detection radii look right.
+            if (showRaycastToOrigin)
+            {
+                Vector3 toOrigin = transform.position - player.position;
+                float dotOrigin = Vector3.Dot(transform.forward, toOrigin.normalized);
+                float rangeOrigin = (dotOrigin >= 0f) ? frontDetectionRange : backDetectionRange;
+
+                bool originHit = Physics.Raycast(
+                    player.position, toOrigin.normalized,
+                    out RaycastHit hitOrigin, rangeOrigin, doorLayerMask
+                );
+
+                // Line: player → pivot
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawLine(player.position, transform.position);
+
+                // Target marker at pivot
+                Gizmos.DrawWireSphere(transform.position, 0.07f);
+
+                // Hit-point marker (brighter yellow) when ray connects
+                if (originHit)
+                {
+                    Gizmos.color = new Color(1f, 1f, 0f, 0.7f);
+                    Gizmos.DrawWireSphere(hitOrigin.point, 0.06f);
+                }
+            }
+
+            // ── Raycast to door geometric CENTRE ─────────────────────────────
+            // Shown in CYAN. This mirrors the exact ray fired at runtime, so
+            // what you see here is exactly what the door "feels" each frame.
+            if (showRaycastToCenter)
+            {
+                Vector3 centerWorld = transform.TransformPoint(_doorCenter);
+                Vector3 toCenter = centerWorld - player.position;
+                float dotCenter = Vector3.Dot(transform.forward, toCenter.normalized);
+                float rangeCenter = (dotCenter >= 0f) ? frontDetectionRange : backDetectionRange;
+
+                bool centerHit = Physics.Raycast(
+                    player.position, toCenter.normalized,
+                    out RaycastHit hitCenter, rangeCenter, doorLayerMask
+                );
+
+                // Line: player → geometric centre
+                Gizmos.color = new Color(0.2f, 0.9f, 1f, 0.9f);
+                Gizmos.DrawLine(player.position, centerWorld);
+
+                // Target marker at centre
+                Gizmos.DrawWireSphere(centerWorld, 0.07f);
+
+                // Hit-point marker (teal) when ray connects
+                if (centerHit)
+                {
+                    Gizmos.color = new Color(0.2f, 1f, 0.8f, 0.8f);
+                    Gizmos.DrawWireSphere(hitCenter.point, 0.06f);
+                }
+            }
         }
     }
 #endif

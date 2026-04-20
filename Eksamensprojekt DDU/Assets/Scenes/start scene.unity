@@ -1190,7 +1190,7 @@ MonoBehaviour:
   m_MinValue: 0
   m_MaxValue: 1
   m_WholeNumbers: 0
-  m_Value: 0
+  m_Value: 1
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -2545,7 +2545,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a1428d4c2b7cd9742b825e56f7d21e14, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenePixelConfig
-  pixelSize: 2
+  pixelSize: 1
   paletteStrength: 0
   fadeOnStart: 0
   fadeDuration: 1
@@ -2882,30 +2882,30 @@ MonoBehaviour:
   blinkHoldDuration: 0.2
   typewriterFullText: 'Employment Notice
 
-    
+
 
     Your cooperation has been noted.
 
     The
     agreement is now binding.
 
-    
 
-    You are expected to report immediately
-    for your first shift. Upon arrival, proceed to the main office, located behind
-    the door on your right hand side. Once inside, locate and scan the fax machine
-    to start your first shift.
 
-    
+    You are expected to report immediately for your
+    first shift. Upon arrival, proceed to the main office, located behind the door
+    on your right hand side. Once inside, locate and scan the fax machine to start
+    your first shift.
 
-    Failure to comply may result in immediate
-    termination of contract.
 
-    
+
+    Failure to comply may result in immediate termination
+    of contract.
+
+
 
     We look forward to your continued cooperation.
 
-    
+
 
     Side
     note: Previous employees have gone schizophrenic while at this occupancy. They
@@ -9021,7 +9021,7 @@ MonoBehaviour:
   sensitivitySlider: {fileID: 477514559}
   volumeSlider: {fileID: 641345960}
   defaultSensitivity: 1
-  defaultVolume: 0.423
+  defaultVolume: 1
   creditsOverlay: {fileID: 942688839643049169}
   creditsVideoPlayer: {fileID: 1962367502170336023}
   creditsRawImage: {fileID: 6550198694305229893}
